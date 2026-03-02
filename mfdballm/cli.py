@@ -1,62 +1,69 @@
+# mfdballm/cli.py
+
 import argparse
 import logging
-import requests
-import os
+import sys
+from pprint import pprint
 
 from mfdballm.llm_client import LLMClient
-from mfdballm.logging_config import configure_logging
 
-
-def health_check():
-    api_key = os.getenv("OPENROUTER_API_KEY")
-
-    if not api_key:
-        print("LLM health: FAIL (API key not set)")
-        return
-
-    try:
-        response = requests.get(
-            "https://openrouter.ai/api/v1/models",
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=5,
-        )
-
-        if response.status_code == 200:
-            print("LLM health: OK")
-        else:
-            print(f"LLM health: FAIL (HTTP {response.status_code})")
-
-    except Exception as e:
-        print(f"LLM health: FAIL ({e})")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
 
 
 def main():
-    configure_logging()
+    parser = argparse.ArgumentParser(
+        description="MFDBA LLM CLI"
+    )
 
-    parser = argparse.ArgumentParser(prog="mfdballm")
     subparsers = parser.add_subparsers(dest="command")
 
     chat_parser = subparsers.add_parser("chat")
-    chat_parser.add_argument("prompt")
+    chat_parser.add_argument("message", type=str)
 
     subparsers.add_parser("health")
+    subparsers.add_parser("doctor")
 
     args = parser.parse_args()
 
-    if args.command == "health":
-        health_check()
-        return
+    client = LLMClient()
 
     if args.command == "chat":
-        client = LLMClient()
 
         messages = [
-            {"role": "system", "content": "You are a precise coding assistant."},
-            {"role": "user", "content": args.prompt},
+            {"role": "user", "content": args.message}
         ]
 
-        result = client.chat(messages)
-        print(result)
-        return
+        try:
+            result = client.chat(messages)
+            print(result)
+            return 0
+        except Exception as e:
+            print(f"ERROR: {e}")
+            return 1
 
-    parser.print_help()
+    elif args.command == "doctor":
+
+        snapshot = client.router.get_health_snapshot()
+
+        print("\n=== PROVIDER HEALTH STATUS ===\n")
+
+        for provider in snapshot:
+            pprint(provider)
+            print()
+
+        return 0
+
+    elif args.command == "health":
+        print("OK")
+        return 0
+
+    else:
+        parser.print_help()
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
