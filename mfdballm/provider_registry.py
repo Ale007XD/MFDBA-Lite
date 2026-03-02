@@ -1,16 +1,34 @@
+# mfdballm/provider_registry.py
+
+import os
+from typing import List
+
 from mfdballm.providers.groq import GroqProvider
 from mfdballm.providers.openrouter import OpenRouterProvider
-from mfdballm.providers.gemini import GeminiProvider
 
 
-def build_providers():
+def build_providers() -> List:
     """
-    Return providers in priority order.
-    Order matters for router fallback.
+    Build providers in deterministic priority order.
+
+    Order:
+        1. Groq
+        2. OpenRouter
     """
 
-    return [
-        OpenRouterProvider(),
-        GroqProvider(),
-        GeminiProvider(),
-    ]
+    providers = []
+
+    try:
+        providers.append(GroqProvider())
+    except Exception:
+        pass
+
+    try:
+        providers.append(OpenRouterProvider())
+    except Exception:
+        pass
+
+    if not providers:
+        raise RuntimeError("No providers available")
+
+    return providers

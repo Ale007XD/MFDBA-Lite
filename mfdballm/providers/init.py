@@ -1,11 +1,9 @@
 from .base import BaseProvider
-from .openrouter import OpenRouterProvider
 from .groq import GroqProvider
-from .gemini import GeminiProvider
+from .openrouter import OpenRouterProvider
 
 __all__ = [
     "BaseProvider",
-    "OpenRouterProvider",
     "GroqProvider",
-    "GeminiProvider",
+    "OpenRouterProvider",
 ]
