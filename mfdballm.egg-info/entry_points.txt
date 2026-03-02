@@ -1,2 +1,2 @@
 [console_scripts]
-mfdba = mfdballm.cli:main
+mfdballm = mfdballm.cli:main

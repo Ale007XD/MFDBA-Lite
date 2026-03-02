@@ -2,6 +2,8 @@ pyproject.toml
 mfdballm/__init__.py
 mfdballm/builder.py
 mfdballm/cli.py
+mfdballm/init.py
+mfdballm/llm_client.py
 mfdballm/orchestrator.py
 mfdballm/pro_agent.py
 mfdballm/rate_limiter.py
@@ -9,4 +11,6 @@ mfdballm.egg-info/PKG-INFO
 mfdballm.egg-info/SOURCES.txt
 mfdballm.egg-info/dependency_links.txt
 mfdballm.egg-info/entry_points.txt
+mfdballm.egg-info/requires.txt
 mfdballm.egg-info/top_level.txt
+mfdballm/providers/__init__.py
