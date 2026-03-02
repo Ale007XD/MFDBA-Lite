@@ -1,22 +1,16 @@
 #!/bin/bash
-> project-full-dump.md
-echo "# 🎯 Полный снапшот MFDBA-Lite" >> project-full-dump.md
-echo "**Commit:** $(git rev-parse HEAD) | **Файлов:** $(find . -type f | wc -l)**" >> project-full-dump.md
-echo "" >> project-full-dump.md
-
-for file in $(find . -type f ! -path '*/.git/*' | sort); do
-  echo -e "
-## 📄 $file" >> project-full-dump.md
-  echo "**Размер:** $(wc -c < "$file") bytes | $(file "$file")**" >> project-full-dump.md
-  echo "```" >> project-full-dump.md
-  if file "$file" | grep -q text; then
-    cat "$file" >> project-full-dump.md 2>/dev/null
-  else
-    echo "[Binary file]" >> project-full-dump.md
-  fi
-  echo -e "
-```
-" >> project-full-dump.md
+DUMP="snapshot-$(date +%Y%m%d-%H%M%S).md"
+echo "# MFDBA-Lite $(date)" > $DUMP
+echo "## Files:" >> $DUMP
+find . -name "*.py" -o -name "*.toml" -o -name "*.txt" -o -name ".gitignore" | sort >> $DUMP
+for f in $(find . -name "*.py" -o -name "*.toml" -o -name "*.txt"); do
+ echo "" >> $DUMP
+ echo "## $f" >> $DUMP
+ echo '```' >> $DUMP
+ cat $f >> $DUMP 2>/dev/null
+ echo '```' >> $DUMP
 done
-echo -e "
-**✅ Генерация завершена:** $(date)" >> project-full-dump.md
+git add $DUMP
+git commit -m "Dump $DUMP"
+git push
+echo "Done: $DUMP"
