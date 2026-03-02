@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: mfdballm
+Version: 0.1.0
+Summary: MFDBA Global LLM Engine
+Requires-Python: >=3.9

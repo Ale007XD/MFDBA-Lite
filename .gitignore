@@ -1,0 +1,26 @@
+# Зависимости (Node.js/Python)
+node_modules/
+venv/
+__pycache__/
+
+# Логи и временные файлы
+*.log
+*.tmp
+.DS_Store
+
+# IDE/редакторы
+.vscode/
+.idea/
+*.swp
+
+# Секреты и конфиги
+.env
+config.json
+secrets*
+
+# OS-специфичные
+Thumbs.db
+.DS_Store
+
+# Исключение для нужного файла
+!important.md
