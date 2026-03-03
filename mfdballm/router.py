@@ -3,6 +3,7 @@
 import logging
 import time
 from typing import List, Dict, Any
+from threading import RLock
 
 from mfdballm.providers.base import BaseProvider
 from mfdballm.exceptions import (
@@ -14,6 +15,10 @@ from mfdballm.exceptions import (
 logger = logging.getLogger("mfdballm.router")
 
 
+# ============================================================
+# Provider State (Thread Safe via Router Lock)
+# ============================================================
+
 class ProviderState:
     def __init__(self, provider: BaseProvider):
         self.provider = provider
@@ -24,6 +29,10 @@ class ProviderState:
 
         self.ema_latency = None
         self.cooldown_until = 0
+
+    # ----------------------------------------
+    # Derived metrics
+    # ----------------------------------------
 
     @property
     def health_score(self) -> float:
@@ -37,6 +46,10 @@ class ProviderState:
 
         return success_rate * latency_factor
 
+    # ----------------------------------------
+    # Mutations (must be called under Router lock)
+    # ----------------------------------------
+
     def record_success(self, latency: float):
         self.success_count += 1
         self.consecutive_failures = 0
@@ -45,7 +58,9 @@ class ProviderState:
             self.ema_latency = latency
         else:
             alpha = 0.3
-            self.ema_latency = alpha * latency + (1 - alpha) * self.ema_latency
+            self.ema_latency = (
+                alpha * latency + (1 - alpha) * self.ema_latency
+            )
 
     def record_failure(self):
         self.failure_count += 1
@@ -75,9 +90,13 @@ class ProviderState:
         }
 
 
+# ============================================================
+# Thread-Safe Router
+# ============================================================
+
 class Router:
     """
-    v0.5 Self-Healing Router + Doctor Support
+    Production-grade Thread-Safe Self-Healing Router
     """
 
     def __init__(
@@ -92,22 +111,37 @@ class Router:
         self.max_retries = max_retries
         self.base_backoff = base_backoff
 
-        self.provider_states = [
+        self._lock = RLock()
+
+        self.provider_states: List[ProviderState] = [
             ProviderState(p) for p in providers
         ]
 
-    def _sorted_providers(self):
+    # ============================================================
+    # Internal helpers
+    # ============================================================
+
+    def _sorted_providers(self) -> List[ProviderState]:
+        """
+        Returns provider states sorted by health_score.
+        Must be called under lock.
+        """
         return sorted(
             self.provider_states,
             key=lambda s: s.health_score,
             reverse=True,
         )
 
+    # ============================================================
+    # Public API
+    # ============================================================
+
     def get_health_snapshot(self) -> List[Dict[str, Any]]:
-        return [
-            state.snapshot()
-            for state in self._sorted_providers()
-        ]
+        with self._lock:
+            return [
+                state.snapshot()
+                for state in self._sorted_providers()
+            ]
 
     def chat(
         self,
@@ -118,15 +152,27 @@ class Router:
         start_time = time.monotonic()
         last_error = None
 
-        active_states = [
-            s for s in self._sorted_providers()
-            if s.is_available() and s.provider.is_healthy()
-        ]
+        # -------------------------
+        # Phase 1: Select providers (under lock)
+        # -------------------------
+
+        with self._lock:
+            active_states = [
+                s for s in self._sorted_providers()
+                if s.is_available() and s.provider.is_healthy()
+            ]
 
         if not active_states:
             raise RuntimeError("No healthy providers available")
 
-        per_provider_timeout = max(5, timeout // len(active_states))
+        per_provider_timeout = max(
+            5,
+            timeout // max(1, len(active_states))
+        )
+
+        # -------------------------
+        # Phase 2: Execution (no global lock)
+        # -------------------------
 
         for state in active_states:
 
@@ -152,7 +198,9 @@ class Router:
                     )
 
                     latency = time.monotonic() - call_start
-                    state.record_success(latency)
+
+                    with self._lock:
+                        state.record_success(latency)
 
                     logger.info(
                         f"{provider.name} success "
@@ -168,7 +216,10 @@ class Router:
                     ProviderUnavailableError,
                 ) as e:
 
-                    state.record_failure()
+                    with self._lock:
+                        state.record_failure()
+                        in_cooldown = state.cooldown_until > time.time()
+
                     last_error = e
 
                     logger.warning(
@@ -176,7 +227,7 @@ class Router:
                         f"failed: {e}"
                     )
 
-                    if state.cooldown_until > time.time():
+                    if in_cooldown:
                         logger.warning(
                             f"{provider.name} entering cooldown (30s)"
                         )
@@ -188,7 +239,9 @@ class Router:
                         )
                         break
 
-                    backoff_time = self.base_backoff * (2 ** (attempt - 1))
+                    backoff_time = self.base_backoff * (
+                        2 ** (attempt - 1)
+                    )
 
                     logger.info(
                         f"{provider.name} backoff sleeping "
@@ -198,11 +251,16 @@ class Router:
                     time.sleep(backoff_time)
 
                 except Exception as e:
-                    state.record_failure()
+
+                    with self._lock:
+                        state.record_failure()
+
                     last_error = e
+
                     logger.error(
                         f"{provider.name} unexpected error: {e}"
                     )
+
                     break
 
         raise RuntimeError(

@@ -1,34 +1,54 @@
 # mfdballm/provider_registry.py
 
-import os
-from typing import List
+from typing import List, Type
 
+from mfdballm.config import get_provider_order
+from mfdballm.providers.base import BaseProvider
 from mfdballm.providers.groq import GroqProvider
 from mfdballm.providers.openrouter import OpenRouterProvider
+from mfdballm.providers.gemini import GeminiProvider
 
 
-def build_providers() -> List:
+PROVIDER_MAP: dict[str, Type[BaseProvider]] = {
+    "groq": GroqProvider,
+    "openrouter": OpenRouterProvider,
+    "gemini": GeminiProvider,
+}
+
+
+def build_providers() -> List[BaseProvider]:
     """
-    Build providers in deterministic priority order.
+    Deterministic provider builder.
 
-    Order:
-        1. Groq
-        2. OpenRouter
+    Order resolution:
+        1. MFDBA_PROVIDER_ORDER env
+        2. DEFAULT_PROVIDER_ORDER from config
+
+    Providers that fail to initialize
+    (e.g. missing API key) are skipped.
+
+    Raises:
+        RuntimeError if no providers available.
     """
 
-    providers = []
+    order = get_provider_order()
 
-    try:
-        providers.append(GroqProvider())
-    except Exception:
-        pass
+    providers: List[BaseProvider] = []
 
-    try:
-        providers.append(OpenRouterProvider())
-    except Exception:
-        pass
+    for name in order:
+        provider_cls = PROVIDER_MAP.get(name.lower())
+        if not provider_cls:
+            continue
+
+        try:
+            providers.append(provider_cls())
+        except Exception:
+            # Missing API key or other initialization failure
+            continue
 
     if not providers:
-        raise RuntimeError("No providers available")
+        raise RuntimeError(
+            "No providers available after deterministic build"
+        )
 
     return providers

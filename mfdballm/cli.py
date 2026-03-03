@@ -1,16 +1,10 @@
 # mfdballm/cli.py
 
 import argparse
-import logging
 import sys
 from pprint import pprint
 
 from mfdballm.llm_client import LLMClient
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
 
 
 def main():
@@ -23,8 +17,8 @@ def main():
     chat_parser = subparsers.add_parser("chat")
     chat_parser.add_argument("message", type=str)
 
-    subparsers.add_parser("health")
     subparsers.add_parser("doctor")
+    subparsers.add_parser("health")
 
     args = parser.parse_args()
 
