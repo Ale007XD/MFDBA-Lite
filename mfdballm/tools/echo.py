@@ -1,4 +1,4 @@
-from .base import Tool
+from mfdballm.tools.base import Tool
 
 
 class EchoTool(Tool):
@@ -6,5 +6,15 @@ class EchoTool(Tool):
     name = "echo"
     description = "Echo input text"
 
-    async def run(self, text: str):
-        return {"echo": text}
+    schema = {
+        "type": "object",
+        "properties": {
+            "text": {
+                "type": "string"
+            }
+        },
+        "required": ["text"]
+    }
+
+    def run(self, text):
+        return text

@@ -1,34 +1,52 @@
 import json
 
-from .tool_parser import parse_tool_call
+from mfdballm.tools.tool_prompt import build_tools_prompt
+from mfdballm.tools.tool_executor import execute_tool
 
 
-class Agent:
+class AgentLoop:
 
-    def __init__(self, router, tool_executor, max_steps=8):
+    def __init__(self, router, tools=None, max_iterations=5):
+
         self.router = router
-        self.tool_executor = tool_executor
-        self.max_steps = max_steps
+        self.tools = tools or []
+        self.max_iterations = max_iterations
 
     async def run(self, messages):
 
-        for _ in range(self.max_steps):
+        # Inject tool schema into system prompt
+        system_prompt = build_tools_prompt(self.tools)
+
+        messages = [
+            {"role": "system", "content": system_prompt}
+        ] + messages
+
+        for _ in range(self.max_iterations):
 
             response = await self.router.chat(messages)
 
-            tool_call = parse_tool_call(response.text)
+            messages.append({
+                "role": "assistant",
+                "content": response
+            })
 
-            if not tool_call:
-                return response.text
+            # detect tool call
+            try:
+                data = json.loads(response)
+            except Exception:
+                return response
 
-            result = await self.tool_executor.execute(
-                tool_call["name"],
-                tool_call.get("args", {})
-            )
+            if "tool" not in data:
+                return response
+
+            tool_name = data["tool"]
+            args = data.get("args", {})
+
+            result = execute_tool(tool_name, args, self.tools)
 
             messages.append({
                 "role": "tool",
                 "content": json.dumps(result)
             })
 
-        return "Agent stopped: step limit"
+        return "Max agent iterations reached"

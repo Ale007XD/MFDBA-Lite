@@ -1,107 +1,92 @@
 # mfdballm/config.py
 
-import os
-from typing import List
-from pathlib import Path
 
-# ============================================================
-# HTTP / Networking
-# ============================================================
+class Config:
 
-DEFAULT_HTTP_TIMEOUT = 15
+    def __init__(self):
 
+        # Router provider order
+        self.PROVIDERS = [
+            "gemini",
+            "openrouter",
+            "local",
+        ]
 
-def get_http_timeout() -> int:
-    return int(os.getenv("MFDBA_HTTP_TIMEOUT", str(DEFAULT_HTTP_TIMEOUT)))
+        # Gemini (free tier)
+        self.GEMINI_MODELS = [
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-8b",
+            "gemini-pro",
+        ]
 
+        # OpenRouter free models
+        self.OPENROUTER_MODELS = [
+            "mistralai/mistral-7b-instruct",
+            "meta-llama/llama-3-8b-instruct",
+        ]
 
-# ============================================================
-# Health Cache
-# ============================================================
+        # Local models
+        self.LOCAL_MODELS = [
+            "llama3",
+            "mistral",
+        ]
 
-DEFAULT_HEALTH_TTL = 30
+        # Router retry
+        self.MAX_RETRIES = 2
 
+        # Circuit breaker
+        self.FAILURE_THRESHOLD = 3
+        self.RESET_TIMEOUT = 30
 
-def get_health_ttl() -> int:
-    return int(os.getenv("MFDBA_HEALTH_TTL", str(DEFAULT_HEALTH_TTL)))
+        # Retry backoff
+        self.BASE_BACKOFF = 1.5
 
-
-# ============================================================
-# Circuit Breaker Configuration (v0.9.0)
-# ============================================================
-
-DEFAULT_FAILURE_THRESHOLD = 3
-DEFAULT_RECOVERY_TIMEOUT = 30
-DEFAULT_HALF_OPEN_MAX_REQUESTS = 1
-
-DEFAULT_MAX_RETRIES = 3
-DEFAULT_BASE_BACKOFF = 1.0
-
-
-def get_failure_threshold() -> int:
-    return int(os.getenv("MFDBA_FAILURE_THRESHOLD", str(DEFAULT_FAILURE_THRESHOLD)))
-
-
-def get_recovery_timeout() -> int:
-    return int(os.getenv("MFDBA_RECOVERY_TIMEOUT", str(DEFAULT_RECOVERY_TIMEOUT)))
-
-
-def get_half_open_max_requests() -> int:
-    return int(
-        os.getenv(
-            "MFDBA_HALF_OPEN_MAX_REQUESTS",
-            str(DEFAULT_HALF_OPEN_MAX_REQUESTS),
-        )
-    )
+        # Request timeout
+        self.REQUEST_TIMEOUT = 60
 
 
-def get_max_retries() -> int:
-    return int(os.getenv("MFDBA_MAX_RETRIES", str(DEFAULT_MAX_RETRIES)))
+config = Config()
 
 
-def get_base_backoff() -> float:
-    return float(os.getenv("MFDBA_BASE_BACKOFF", str(DEFAULT_BASE_BACKOFF)))
+# -------------------------
+# Provider order
+# -------------------------
+
+def get_provider_order():
+    return config.PROVIDERS
 
 
-# ============================================================
-# Provider Order
-# ============================================================
+# -------------------------
+# Gemini
+# -------------------------
 
-DEFAULT_PROVIDER_ORDER = ["groq", "openrouter", "gemini"]
-
-
-def get_provider_order() -> List[str]:
-    raw = os.getenv("MFDBA_PROVIDER_ORDER", "").strip()
-
-    if not raw:
-        return DEFAULT_PROVIDER_ORDER.copy()
-
-    order = [
-        p.strip().lower()
-        for p in raw.split(",")
-        if p.strip()
-    ]
-
-    if not order:
-        return DEFAULT_PROVIDER_ORDER.copy()
-
-    return order
+def get_gemini_models():
+    return config.GEMINI_MODELS
 
 
-# ============================================================
-# Gemini Configuration
-# ============================================================
-
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+def get_gemini_model():
+    return config.GEMINI_MODELS[0]
 
 
-def get_gemini_model() -> str:
-    return os.getenv("MFDBA_GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+# -------------------------
+# OpenRouter
+# -------------------------
+
+def get_openrouter_models():
+    return config.OPENROUTER_MODELS
 
 
-# ============================================================
-# Session Root
-# ============================================================
+def get_openrouter_model():
+    return config.OPENROUTER_MODELS[0]
 
-def get_sessions_root() -> Path:
-    return Path.home() / ".mfdballm" / "sessions"
+
+# -------------------------
+# Local models
+# -------------------------
+
+def get_local_models():
+    return config.LOCAL_MODELS
+
+
+def get_local_model():
+    return config.LOCAL_MODELS[0]

@@ -1,82 +1,54 @@
-# mfdballm/providers/openrouter.py
-
 import os
 import requests
-import time
-from typing import List, Dict
 
+from mfdballm.config import get_openrouter_models
+from mfdballm.exceptions import ProviderUnavailableError
 from mfdballm.providers.base import BaseProvider
-from mfdballm.exceptions import (
-    ProviderRateLimitError,
-    ProviderTimeoutError,
-    ProviderUnavailableError,
-)
-
-
-FREE_MODELS = [
-    "meta-llama/llama-3.2-3b-instruct:free",
-    "google/gemma-2-9b-it:free",
-    "mistralai/mistral-7b-instruct:free",
-]
 
 
 class OpenRouterProvider(BaseProvider):
 
-    BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
+    name = "openrouter"
 
     def __init__(self):
-        super().__init__("openrouter")
 
-        self.api_key = os.getenv("OPENROUTER_API_KEY")
+        self.api_key = os.environ.get("OPENROUTER_API_KEY")
+
         if not self.api_key:
             raise ProviderUnavailableError("OPENROUTER_API_KEY not set")
 
-        self.session = requests.Session()
-        self.session.headers.update({
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        })
+        self.models = get_openrouter_models()
 
-    def _call_model(self, model: str, messages, timeout):
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.2,
-        }
+    def chat(self, messages):
 
-        try:
-            response = self.session.post(
-                self.BASE_URL,
-                json=payload,
-                timeout=timeout,
-            )
-        except requests.Timeout:
-            raise ProviderTimeoutError("OpenRouter timeout")
-        except requests.RequestException as e:
-            raise ProviderUnavailableError(str(e))
+        last_error = None
 
-        if response.status_code == 429:
-            raise ProviderRateLimitError("OpenRouter rate limited")
+        for model in self.models:
 
-        if response.status_code == 404:
-            return None
+            try:
 
-        if not response.ok:
-            raise ProviderUnavailableError(
-                f"OpenRouter error {response.status_code}: {response.text}"
-            )
+                response = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": messages,
+                    },
+                    timeout=60,
+                )
 
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+                data = response.json()
 
-    def chat(self, messages: List[Dict], timeout=30) -> str:
-        for model in FREE_MODELS:
-            result = self._call_model(model, messages, timeout)
-            if result:
-                return result
-            time.sleep(1)
+                return data["choices"][0]["message"]["content"]
 
-        raise ProviderUnavailableError("All FREE OpenRouter models failed")
+            except Exception as e:
 
-    def health(self) -> bool:
-        return bool(self.api_key)
+                last_error = e
+                continue
+
+        raise ProviderUnavailableError(
+            f"All OpenRouter models failed. Last error: {last_error}"
+        )

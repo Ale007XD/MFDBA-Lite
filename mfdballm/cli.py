@@ -1,63 +1,56 @@
-# mfdballm/cli.py
-
 import argparse
-import sys
-from pprint import pprint
+import asyncio
 
-from mfdballm.llm_client import LLMClient
+from mfdballm.router import Router
+from mfdballm.provider_registry import build_providers
+from mfdballm.agent.agent_loop import AgentLoop
+
+# tools
+from mfdballm.tools.echo import EchoTool
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="MFDBA LLM CLI"
+async def async_main():
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "command",
+        choices=["chat"]
     )
 
-    subparsers = parser.add_subparsers(dest="command")
-
-    chat_parser = subparsers.add_parser("chat")
-    chat_parser.add_argument("message", type=str)
-
-    subparsers.add_parser("doctor")
-    subparsers.add_parser("health")
+    parser.add_argument(
+        "message",
+        nargs="?"
+    )
 
     args = parser.parse_args()
 
-    client = LLMClient()
+    providers = build_providers()
+
+    router = Router(providers)
+
+    tools = [
+        EchoTool()
+    ]
+
+    agent = AgentLoop(
+        router=router,
+        tools=tools
+    )
 
     if args.command == "chat":
 
         messages = [
-            {"role": "user", "content": args.message}
+            {
+                "role": "user",
+                "content": args.message
+            }
         ]
 
-        try:
-            result = client.chat(messages)
-            print(result)
-            return 0
-        except Exception as e:
-            print(f"ERROR: {e}")
-            return 1
+        result = await agent.run(messages)
 
-    elif args.command == "doctor":
-
-        snapshot = client.router.get_health_snapshot()
-
-        print("\n=== PROVIDER HEALTH STATUS ===\n")
-
-        for provider in snapshot:
-            pprint(provider)
-            print()
-
-        return 0
-
-    elif args.command == "health":
-        print("OK")
-        return 0
-
-    else:
-        parser.print_help()
-        return 0
+        print(result)
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+def main():
+    asyncio.run(async_main())

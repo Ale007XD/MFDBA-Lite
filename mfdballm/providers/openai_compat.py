@@ -6,24 +6,24 @@ from mfdballm.types import ProviderResponse
 from mfdballm.exceptions import ProviderUnavailableError
 
 
-GROQ_MODELS = [
-    "llama-3.1-8b-instant",
-    "llama-3.1-70b-versatile"
+OPENROUTER_MODELS = [
+    "openrouter/auto",
+    "meta-llama/llama-3.1-8b-instruct"
 ]
 
 
-class GroqProvider(BaseProvider):
+class OpenAICompatProvider(BaseProvider):
 
-    name = "groq"
+    name = "openrouter"
 
     def __init__(self):
 
-        self.api_key = os.getenv("GROQ_API_KEY")
+        self.api_key = os.getenv("OPENROUTER_API_KEY")
 
         if not self.api_key:
-            raise Exception("GROQ_API_KEY not set")
+            raise Exception("OPENROUTER_API_KEY not set")
 
-        self.base_url = "https://api.groq.com/openai/v1/chat/completions"
+        self.base_url = "https://openrouter.ai/api/v1/chat/completions"
 
     async def chat(self, messages):
 
@@ -36,7 +36,7 @@ class GroqProvider(BaseProvider):
 
         async with httpx.AsyncClient(timeout=60) as client:
 
-            for model in GROQ_MODELS:
+            for model in OPENROUTER_MODELS:
 
                 payload = {
                     "model": model,
@@ -68,7 +68,7 @@ class GroqProvider(BaseProvider):
                 except Exception as e:
                     last_error = str(e)
 
-        raise ProviderUnavailableError(f"Groq failed: {last_error}")
+        raise ProviderUnavailableError(f"OpenRouter failed: {last_error}")
 
     def health(self):
 
