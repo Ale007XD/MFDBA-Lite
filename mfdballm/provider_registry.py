@@ -1,68 +1,42 @@
 import os
 
-from mfdballm.config_loader import load_config
-
-from mfdballm.providers.gemini import GeminiProvider
-from mfdballm.providers.groq import GroqProvider
-from mfdballm.providers.openai_compat import OpenAICompatProvider
+from mfdballm.providers.gemini_provider import GeminiProvider
+from mfdballm.providers.groq_provider import GroqProvider
+from mfdballm.providers.openrouter_provider import OpenRouterProvider
 
 
 def build_providers():
-    """
-    Build provider instances based on config and API keys.
-    """
-
-    config = load_config()
-
     providers = []
 
-    providers_cfg = config.get("providers", {})
-    router_cfg = config.get("router", {})
+    groq_key = os.getenv("GROQ_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
-    order = router_cfg.get("order", ["groq", "gemini", "openrouter"])
+    if groq_key:
+        providers.append(
+            GroqProvider(
+                api_key=groq_key,
+                model="llama3-70b-8192"
+            )
+        )
 
-    for name in order:
+    if gemini_key:
+        providers.append(
+            GeminiProvider(
+                api_key=gemini_key,
+                model="gemini-2.0-flash"
+            )
+        )
 
-        if name == "groq":
-            cfg = providers_cfg.get("groq", {})
-
-            api_key = os.getenv("GROQ_API_KEY") or cfg.get("api_key")
-
-            if api_key:
-                providers.append(
-                    GroqProvider(
-                        api_key=api_key
-                    )
-                )
-
-        elif name == "gemini":
-            cfg = providers_cfg.get("gemini", {})
-
-            api_key = os.getenv("GEMINI_API_KEY") or cfg.get("api_key")
-
-            if api_key:
-                providers.append(
-                    GeminiProvider(
-                        api_key=api_key
-                    )
-                )
-
-        elif name == "openrouter":
-            cfg = providers_cfg.get("openrouter", {})
-
-            api_key = os.getenv("OPENROUTER_API_KEY") or cfg.get("api_key")
-
-            if api_key:
-                providers.append(
-                    OpenAICompatProvider(
-                        api_key=api_key,
-                        base_url="https://openrouter.ai/api/v1"
-                    )
-                )
+    if openrouter_key:
+        providers.append(
+            OpenRouterProvider(
+                api_key=openrouter_key,
+                model="openai/gpt-4o-mini"
+            )
+        )
 
     if not providers:
-        raise RuntimeError(
-            "No providers available. Set API keys."
-        )
+        raise RuntimeError("No providers available. Set API keys.")
 
     return providers

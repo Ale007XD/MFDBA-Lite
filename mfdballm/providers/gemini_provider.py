@@ -1,7 +1,7 @@
 import httpx
 from typing import List, Dict
 
-from mfdballm.base_provider import BaseProvider
+from mfdballm.providers.base_provider import BaseProvider
 
 
 class GeminiProvider(BaseProvider):
@@ -14,7 +14,7 @@ class GeminiProvider(BaseProvider):
 
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-    async def generate(self, messages: List[Dict]) -> str:
+    async def chat(self, messages: list[dict], tools=None) -> str:
 
         prompt = "\n".join([m["content"] for m in messages])
 

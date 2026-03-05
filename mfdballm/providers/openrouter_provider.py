@@ -1,7 +1,7 @@
 import httpx
 from typing import List, Dict
 
-from mfdballm.base_provider import BaseProvider
+from mfdballm.providers.base_provider import BaseProvider
 
 
 class OpenRouterProvider(BaseProvider):
@@ -14,7 +14,7 @@ class OpenRouterProvider(BaseProvider):
 
         self.url = "https://openrouter.ai/api/v1/chat/completions"
 
-    async def generate(self, messages: List[Dict]) -> str:
+    async def chat(self, messages: list[dict], tools=None) -> str:
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
