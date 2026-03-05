@@ -1,13 +1,13 @@
 import httpx
 
+from mfdballm.providers.base_provider import BaseProvider
+from mfdballm.types import ProviderResponse
 
-class GeminiProvider:
 
-    def __init__(self, config):
+class GeminiProvider(BaseProvider):
 
-        self.name = "gemini"
-        self.model = config["model"]
-        self.api_key = config["api_key"]
+    def __init__(self, api_key: str, model: str):
+        super().__init__(name="gemini", api_key=api_key, model=model)
 
     async def chat(self, messages, tools=None):
 
@@ -45,4 +45,9 @@ class GeminiProvider:
 
         data = r.json()
 
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+
+        return ProviderResponse(
+            text=text,
+            raw=data
+        )

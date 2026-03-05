@@ -1,64 +1,39 @@
-from mfdballm.provider_registry import ProviderRegistry
+from mfdballm.config import load_config
+from mfdballm.provider_registry import build_providers
 from mfdballm.router import Router
 
-from mfdballm.execution.engine import ExecutionEngine
-from mfdballm.execution.agent import BaseAgent
+from mfdballm.execution.tool_executor import ToolExecutor
+from mfdballm.execution.tool_agent import ToolAgent
 
 from mfdballm.tools.registry import ToolRegistry
 
 
-class DefaultAgent(BaseAgent):
-    """
-    Minimal runtime agent.
-
-    Delegates generation to router.
-    """
-
-    def __init__(self, router: Router):
-        self.router = router
-
-    async def run(self, messages):
-
-        response = await self.router.chat(messages)
-
-        # Providers may return either str or object with .text
-        if isinstance(response, str):
-            return response
-
-        if hasattr(response, "text"):
-            return response.text
-
-        return str(response)
-
-
 class SessionRuntime:
-    """
-    Production runtime container.
-    Builds the full runtime environment.
-    """
 
     def __init__(self):
 
-        # Providers
-        self.provider_registry = ProviderRegistry()
-        self.provider_registry.load_from_env()
+        # загрузка конфигурации
+        config = load_config()
 
-        providers = self.provider_registry.get_providers()
+        # провайдеры
+        providers = build_providers(config)
 
-        # Router
+        # router
         self.router = Router(providers)
 
-        # Tools
-        self.tool_registry = ToolRegistry()
+        # registry инструментов
+        self.registry = ToolRegistry()
 
-        # Agent
-        self.agent = DefaultAgent(self.router)
+        # executor инструментов
+        self.tool_executor = ToolExecutor(self.registry)
 
-        # Execution engine
-        self.engine = ExecutionEngine(self.agent)
+        # agent (LLM reasoning + tool loop)
+        self.agent = ToolAgent(
+            router=self.router,
+            tool_executor=self.tool_executor,
+            registry=self.registry
+        )
 
     async def run(self, messages):
 
-        result = await self.engine.run(messages)
-
-        return result
+        return await self.agent.run(messages)

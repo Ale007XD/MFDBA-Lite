@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+from mfdballm.types import ProviderResponse
+
 
 class BaseProvider(ABC):
 
@@ -10,9 +12,10 @@ class BaseProvider(ABC):
         self.base_url = base_url
 
     @abstractmethod
-    async def chat(self, messages: list[dict], tools: list | None = None) -> str:
+    async def chat(self, messages: list[dict], tools: list | None = None) -> ProviderResponse:
         """
         Universal chat interface for all providers.
+        Must return ProviderResponse.
         """
         pass
 

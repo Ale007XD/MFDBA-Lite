@@ -1,3 +1,6 @@
+from mfdballm.types import ProviderResponse
+
+
 class Router:
     """
     Fallback router.
@@ -7,7 +10,7 @@ class Router:
     def __init__(self, providers):
         self.providers = providers
 
-    async def chat(self, messages, tools=None):
+    async def chat(self, messages, tools=None) -> ProviderResponse:
 
         last_error = None
 

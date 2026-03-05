@@ -2,6 +2,7 @@ import httpx
 from typing import List, Dict
 
 from mfdballm.providers.base_provider import BaseProvider
+from mfdballm.types import ProviderResponse
 
 
 class GroqProvider(BaseProvider):
@@ -13,7 +14,8 @@ class GroqProvider(BaseProvider):
         super().__init__(name="groq", api_key=api_key, model=model)
         self.url = "https://api.groq.com/openai/v1/chat/completions"
 
-    async def chat(self, messages: list[dict], tools=None) -> str:
+    async def chat(self, messages: list[dict], tools=None) -> ProviderResponse:
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -32,4 +34,9 @@ class GroqProvider(BaseProvider):
 
         data = response.json()
 
-        return data["choices"][0]["message"]["content"]
+        text = data["choices"][0]["message"]["content"]
+
+        return ProviderResponse(
+            text=text,
+            raw=data
+        )

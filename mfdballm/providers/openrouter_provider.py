@@ -1,15 +1,18 @@
 import httpx
 
+from mfdballm.providers.base_provider import BaseProvider
+from mfdballm.types import ProviderResponse
 
-class OpenRouterProvider:
 
-    def __init__(self, config):
+class OpenRouterProvider(BaseProvider):
 
-        self.name = "openrouter"
-        self.model = config["model"]
-        self.api_key = config["api_key"]
-
-        self.base_url = "https://openrouter.ai/api/v1/chat/completions"
+    def __init__(self, api_key: str, model: str):
+        super().__init__(
+            name="openrouter",
+            api_key=api_key,
+            model=model,
+            base_url="https://openrouter.ai/api/v1/chat/completions"
+        )
 
     async def chat(self, messages, tools=None):
 
@@ -31,8 +34,13 @@ class OpenRouterProvider:
                 json=payload
             )
 
-            response.raise_for_status()
+        response.raise_for_status()
 
-            data = response.json()
+        data = response.json()
 
-            return data["choices"][0]["message"]["content"]
+        text = data["choices"][0]["message"]["content"]
+
+        return ProviderResponse(
+            text=text,
+            raw=data
+        )
