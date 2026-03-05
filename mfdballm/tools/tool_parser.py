@@ -1,51 +1,44 @@
 import json
 import re
+from typing import Dict, Any, Optional
 
 
-class ToolCall:
-    def __init__(self, name: str, arguments: dict):
-        self.name = name
-        self.arguments = arguments
-
-
-def parse_tool_call(text: str):
+class ToolCallParser:
     """
-    Detect tool call JSON in model output.
+    Parses tool calls from LLM responses.
 
-    Expected format:
-
-    {
-      "tool": "tool_name",
-      "arguments": { ... }
-    }
+    Supports:
+    - structured tool calls
+    - TOOLCALL> textual format
     """
 
-    try:
-        data = json.loads(text)
+    TOOL_PATTERN = r"TOOLCALL>\s*(\[[^\]]+\])"
 
-        if "tool" in data:
-            return ToolCall(
-                name=data["tool"],
-                arguments=data.get("arguments", {})
-            )
+    @staticmethod
+    def parse(text: str) -> Optional[Dict[str, Any]]:
 
-    except Exception:
-        pass
+        if not text:
+            return None
 
-    # try extracting JSON block
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        return None
+        match = re.search(ToolCallParser.TOOL_PATTERN, text)
 
-    try:
-        data = json.loads(match.group())
+        if not match:
+            return None
 
-        if "tool" in data:
-            return ToolCall(
-                name=data["tool"],
-                arguments=data.get("arguments", {})
-            )
-    except Exception:
-        return None
+        try:
 
-    return None
+            calls = json.loads(match.group(1))
+
+            if not calls:
+                return None
+
+            call = calls[0]
+
+            return {
+                "name": call["name"],
+                "arguments": call.get("arguments", {})
+            }
+
+        except Exception:
+
+            return None

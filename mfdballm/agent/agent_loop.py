@@ -1,52 +1,62 @@
-import json
+from typing import List, Dict, Any, Callable
 
-from mfdballm.tools.tool_prompt import build_tools_prompt
-from mfdballm.tools.tool_executor import execute_tool
+from mfdballm.router import Router
+from mfdballm.providers.response import ProviderResponse
+from mfdballm.tools.tool_executor import ToolExecutor
+from mfdballm.tools.schemas import build_schemas
+from mfdballm.tools.tool_parser import ToolCallParser
 
 
 class AgentLoop:
 
-    def __init__(self, router, tools=None, max_iterations=5):
+    def __init__(self, router: Router, tools: Dict[str, Callable] | None = None):
 
         self.router = router
-        self.tools = tools or []
-        self.max_iterations = max_iterations
+        self.tools = tools or {}
 
-    async def run(self, messages):
+        self.executor = ToolExecutor(self.tools)
 
-        # Inject tool schema into system prompt
-        system_prompt = build_tools_prompt(self.tools)
+        self.tool_schemas = build_schemas(self.tools)
 
-        messages = [
-            {"role": "system", "content": system_prompt}
-        ] + messages
+    async def run(self, user_message: str) -> str:
 
-        for _ in range(self.max_iterations):
+        messages: List[Dict[str, Any]] = [
+            {
+                "role": "user",
+                "content": user_message
+            }
+        ]
 
-            response = await self.router.chat(messages)
+        while True:
+
+            response: ProviderResponse = await self.router.generate(
+                messages=messages,
+                tools=self.tool_schemas if self.tools else None
+            )
+
+            # 1 structured tool call
+            tool_call = response.tool_call
+
+            # 2 textual tool call fallback
+            if tool_call is None:
+                tool_call = ToolCallParser.parse(response.content or "")
+
+            # 3 normal response
+            if tool_call is None:
+                return response.content or ""
+
+            tool_name = tool_call["name"]
+            arguments = tool_call["arguments"]
+
+            result = self.executor.execute(tool_name, arguments)
 
             messages.append({
                 "role": "assistant",
-                "content": response
+                "content": None,
+                "tool_call": tool_call
             })
-
-            # detect tool call
-            try:
-                data = json.loads(response)
-            except Exception:
-                return response
-
-            if "tool" not in data:
-                return response
-
-            tool_name = data["tool"]
-            args = data.get("args", {})
-
-            result = execute_tool(tool_name, args, self.tools)
 
             messages.append({
                 "role": "tool",
-                "content": json.dumps(result)
+                "content": str(result)
             })
-
-        return "Max agent iterations reached"

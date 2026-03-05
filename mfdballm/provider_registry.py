@@ -1,22 +1,42 @@
-from mfdballm.providers.gemini import GeminiProvider
-from mfdballm.providers.groq import GroqProvider
-from mfdballm.providers.openai_compat import OpenAICompatProvider
+import os
+from typing import List
+
+from mfdballm.providers.base_provider import BaseProvider
+from mfdballm.providers.openrouter_provider import OpenRouterProvider
 
 
-def build_providers():
-    providers = []
+class ProviderRegistry:
+    """
+    Central registry that instantiates and manages providers.
 
-    for cls in [
-        GeminiProvider,
-        GroqProvider,
-        OpenAICompatProvider,
-    ]:
-        try:
-            providers.append(cls())
-        except Exception as e:
-            print(f"[provider disabled] {cls.__name__}: {e}")
+    Responsibilities:
+    - detect configured providers
+    - instantiate them
+    - provide ordered provider list for Router
+    """
 
-    if not providers:
-        raise RuntimeError("No providers available")
+    def __init__(self):
+        self.providers: List[BaseProvider] = []
 
-    return providers
+    def load_from_env(self):
+        """
+        Load providers based on available environment variables.
+        """
+
+        providers: List[BaseProvider] = []
+
+        # OpenRouter
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if openrouter_key:
+            providers.append(
+                OpenRouterProvider(api_key=openrouter_key)
+            )
+
+        self.providers = providers
+
+    def get_providers(self) -> List[BaseProvider]:
+        """
+        Return active providers.
+        """
+
+        return self.providers

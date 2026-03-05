@@ -1,56 +1,63 @@
 import argparse
 import asyncio
 
+from mfdballm.provider_registry import ProviderRegistry
 from mfdballm.router import Router
-from mfdballm.provider_registry import build_providers
-from mfdballm.agent.agent_loop import AgentLoop
-
-# tools
-from mfdballm.tools.echo import EchoTool
 
 
-async def async_main():
+async def run_chat(user_message: str):
 
-    parser = argparse.ArgumentParser()
+    # Load providers
+    registry = ProviderRegistry()
+    registry.load_from_env()
 
-    parser.add_argument(
-        "command",
-        choices=["chat"]
-    )
+    providers = registry.get_providers()
 
-    parser.add_argument(
-        "message",
-        nargs="?"
-    )
+    if not providers:
+        raise RuntimeError("No providers configured")
 
-    args = parser.parse_args()
-
-    providers = build_providers()
-
+    # Create router
     router = Router(providers)
 
-    tools = [
-        EchoTool()
+    # Build message list
+    messages = [
+        {
+            "role": "user",
+            "content": user_message
+        }
     ]
 
-    agent = AgentLoop(
-        router=router,
-        tools=tools
-    )
+    # Call LLM
+    response = await router.generate(messages)
 
-    if args.command == "chat":
-
-        messages = [
-            {
-                "role": "user",
-                "content": args.message
-            }
-        ]
-
-        result = await agent.run(messages)
-
-        print(result)
+    # Output result
+    print(response.content)
 
 
 def main():
-    asyncio.run(async_main())
+
+    parser = argparse.ArgumentParser(
+        prog="mfdballm",
+        description="MFDBA-Lite Local AI Execution Engine"
+    )
+
+    subparsers = parser.add_subparsers(dest="command")
+
+    chat_parser = subparsers.add_parser("chat")
+    chat_parser.add_argument("message", type=str)
+
+    args = parser.parse_args()
+
+    if args.command == "chat":
+
+        asyncio.run(
+            run_chat(args.message)
+        )
+
+    else:
+
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

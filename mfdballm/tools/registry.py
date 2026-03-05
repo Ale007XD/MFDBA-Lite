@@ -1,19 +1,24 @@
-from typing import Dict
-from .base import Tool
+from typing import Callable, Dict
 
 
 class ToolRegistry:
+    """
+    Registry of available tools.
+    """
 
     def __init__(self):
-        self._tools: Dict[str, Tool] = {}
+        self.tools: Dict[str, Callable] = {}
 
-    def register(self, tool: Tool):
-        self._tools[tool.name] = tool
+    def register(self, name: str, func: Callable):
+        """
+        Register a tool function.
+        """
 
-    def get(self, name: str) -> Tool:
-        if name not in self._tools:
-            raise ValueError(f"Tool not found: {name}")
-        return self._tools[name]
+        self.tools[name] = func
 
-    def list(self):
-        return list(self._tools.keys())
+    def get_tools(self) -> Dict[str, Callable]:
+        """
+        Return all registered tools.
+        """
+
+        return self.tools
