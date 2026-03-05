@@ -1,30 +1,25 @@
-from typing import Optional, Dict, Any
 from mfdballm.execution.agent import BaseAgent
 
 
-class ExecutionResult:
-
-    def __init__(self, output: str, metadata: Optional[Dict[str, Any]] = None):
-        self.output = output
-        self.metadata = metadata or {}
-
-
 class ExecutionEngine:
+    """
+    Core execution orchestrator.
+
+    The engine is intentionally simple and only delegates
+    execution to the provided agent.
+
+    Architecture principle:
+        Engine orchestrates
+        Agent contains reasoning
+    """
 
     def __init__(self, agent: BaseAgent):
         self.agent = agent
 
-    async def run(
-        self,
-        message: str,
-        context: Optional[Dict[str, Any]] = None
-    ) -> ExecutionResult:
-
-        context = context or {}
-
+    async def run(self, message: str):
+        """
+        Execute a message through the agent.
+        """
         result = await self.agent.run(message)
 
-        return ExecutionResult(
-            output=result,
-            metadata=context
-        )
+        return result

@@ -1,24 +1,27 @@
 import asyncio
+import json
 
-from mfdballm.provider_registry import build_providers
 from mfdballm.router import Router
+from mfdballm.provider_registry import build_providers
 
 
 async def main():
 
-    providers = build_providers()
+    with open("config/config.default.json") as f:
+        config = json.load(f)
+
+    providers = build_providers(config)
 
     router = Router(providers)
 
     messages = [
-        {"role": "user", "content": "Say hello in one sentence."}
+        {"role": "user", "content": "Hello!"}
     ]
 
     response = await router.chat(messages)
 
-    print("\nMODEL RESPONSE:")
+    print("MODEL RESPONSE:")
     print(response)
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(main())

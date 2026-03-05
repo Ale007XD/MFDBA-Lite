@@ -1,44 +1,48 @@
 import httpx
-from typing import List, Dict
-
-from mfdballm.providers.base_provider import BaseProvider
 
 
-class GeminiProvider(BaseProvider):
-    """
-    Google Gemini Provider
-    """
+class GeminiProvider:
 
-    def __init__(self, api_key: str, model: str = "gemini-1.5-flash"):
-        super().__init__(name="gemini", api_key=api_key, model=model)
+    def __init__(self, config):
 
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        self.name = "gemini"
+        self.model = config["model"]
+        self.api_key = config["api_key"]
 
-    async def chat(self, messages: list[dict], tools=None) -> str:
+    async def chat(self, messages, tools=None):
 
-        prompt = "\n".join([m["content"] for m in messages])
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model}:generateContent?key={self.api_key}"
+        )
+
+        contents = []
+
+        for m in messages:
+
+            role = "user"
+
+            if m["role"] == "assistant":
+                role = "model"
+
+            contents.append({
+                "role": role,
+                "parts": [{"text": m["content"]}]
+            })
 
         payload = {
-            "contents": [
-                {
-                    "parts": [{"text": prompt}]
-                }
-            ]
-        }
-
-        params = {
-            "key": self.api_key
+            "contents": contents
         }
 
         async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                self.url,
-                params=params,
-                json=payload,
+
+            r = await client.post(
+                url,
+                json=payload
             )
 
-        response.raise_for_status()
+        r.raise_for_status()
 
-        data = response.json()
+        data = r.json()
 
         return data["candidates"][0]["content"]["parts"][0]["text"]

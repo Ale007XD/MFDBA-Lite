@@ -16,9 +16,9 @@ async def main():
 
     engine = ExecutionEngine(agent)
 
-    result = await engine.run("hello")
+    r = await engine.run("hello")
 
-    assert result.output == "HELLO"
+    assert r == "HELLO"
 
     print("EXECUTION ENGINE TEST PASSED")
 
