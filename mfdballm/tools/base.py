@@ -1,8 +1,12 @@
-class Tool:
+from abc import ABC, abstractmethod
+from typing import Dict, Any
 
-    name = ""
-    description = ""
-    schema = {}
 
-    def run(self, **kwargs):
-        raise NotImplementedError
+class BaseTool(ABC):
+
+    name: str
+    description: str
+
+    @abstractmethod
+    async def run(self, args: Dict[str, Any]) -> Any:
+        pass

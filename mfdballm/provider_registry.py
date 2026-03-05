@@ -1,42 +1,76 @@
 import os
 
-from mfdballm.providers.gemini_provider import GeminiProvider
-from mfdballm.providers.groq_provider import GroqProvider
-from mfdballm.providers.openrouter_provider import OpenRouterProvider
 
+class ProviderRegistry:
+    """
+    Registry for all LLM providers.
 
-def build_providers():
-    providers = []
+    Responsibilities:
+    - load providers from environment
+    - store provider instances
+    - provide access for Router
+    """
 
-    groq_key = os.getenv("GROQ_API_KEY")
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    def __init__(self):
+        self.providers = {}
 
-    if groq_key:
-        providers.append(
-            GroqProvider(
-                api_key=groq_key,
-                model="llama3-70b-8192"
-            )
-        )
+    # ---------------------------------------------------------
+    # basic registry operations
+    # ---------------------------------------------------------
 
-    if gemini_key:
-        providers.append(
-            GeminiProvider(
-                api_key=gemini_key,
-                model="gemini-2.0-flash"
-            )
-        )
+    def register(self, name, provider):
+        """
+        Register provider instance.
+        """
+        self.providers[name] = provider
 
-    if openrouter_key:
-        providers.append(
-            OpenRouterProvider(
-                api_key=openrouter_key,
-                model="openai/gpt-4o-mini"
-            )
-        )
+    def get(self, name):
+        """
+        Get provider by name.
+        """
+        return self.providers.get(name)
 
-    if not providers:
-        raise RuntimeError("No providers available. Set API keys.")
+    def list(self):
+        """
+        List provider names.
+        """
+        return list(self.providers.keys())
 
-    return providers
+    def get_providers(self):
+        """
+        Return provider instances (used by Router).
+        """
+        return list(self.providers.values())
+
+    # ---------------------------------------------------------
+    # environment loader
+    # ---------------------------------------------------------
+
+    def load_from_env(self):
+        """
+        Auto-load providers based on available API keys.
+        """
+
+        # OpenRouter
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if openrouter_key:
+            from mfdballm.providers.openrouter_provider import OpenRouterProvider
+
+            provider = OpenRouterProvider(api_key=openrouter_key)
+            self.register("openrouter", provider)
+
+        # Groq
+        groq_key = os.getenv("GROQ_API_KEY")
+        if groq_key:
+            from mfdballm.providers.groq_provider import GroqProvider
+
+            provider = GroqProvider(api_key=groq_key)
+            self.register("groq", provider)
+
+        # Gemini
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if gemini_key:
+            from mfdballm.providers.gemini_provider import GeminiProvider
+
+            provider = GeminiProvider(api_key=gemini_key)
+            self.register("gemini", provider)
