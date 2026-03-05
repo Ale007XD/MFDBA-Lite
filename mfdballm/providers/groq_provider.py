@@ -4,18 +4,16 @@ from typing import List, Dict
 from mfdballm.base_provider import BaseProvider
 
 
-class OpenRouterProvider(BaseProvider):
+class GroqProvider(BaseProvider):
     """
-    OpenRouter Provider
+    Groq LLM Provider
     """
 
-    def __init__(self, api_key: str, model: str = "openai/gpt-4o-mini"):
-        super().__init__(name="openrouter", api_key=api_key, model=model)
-
-        self.url = "https://openrouter.ai/api/v1/chat/completions"
+    def __init__(self, api_key: str, model: str = "llama3-70b-8192"):
+        super().__init__(name="groq", api_key=api_key, model=model)
+        self.url = "https://api.groq.com/openai/v1/chat/completions"
 
     async def generate(self, messages: List[Dict]) -> str:
-
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -28,11 +26,7 @@ class OpenRouterProvider(BaseProvider):
         }
 
         async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                self.url,
-                headers=headers,
-                json=payload,
-            )
+            response = await client.post(self.url, headers=headers, json=payload)
 
         response.raise_for_status()
 

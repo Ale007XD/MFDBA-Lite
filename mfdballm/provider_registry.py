@@ -1,42 +1,68 @@
 import os
-from typing import List
 
-from mfdballm.providers.base_provider import BaseProvider
-from mfdballm.providers.openrouter_provider import OpenRouterProvider
+from mfdballm.config_loader import load_config
+
+from mfdballm.providers.gemini import GeminiProvider
+from mfdballm.providers.groq import GroqProvider
+from mfdballm.providers.openai_compat import OpenAICompatProvider
 
 
-class ProviderRegistry:
+def build_providers():
     """
-    Central registry that instantiates and manages providers.
-
-    Responsibilities:
-    - detect configured providers
-    - instantiate them
-    - provide ordered provider list for Router
+    Build provider instances based on config and API keys.
     """
 
-    def __init__(self):
-        self.providers: List[BaseProvider] = []
+    config = load_config()
 
-    def load_from_env(self):
-        """
-        Load providers based on available environment variables.
-        """
+    providers = []
 
-        providers: List[BaseProvider] = []
+    providers_cfg = config.get("providers", {})
+    router_cfg = config.get("router", {})
 
-        # OpenRouter
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
-        if openrouter_key:
-            providers.append(
-                OpenRouterProvider(api_key=openrouter_key)
-            )
+    order = router_cfg.get("order", ["groq", "gemini", "openrouter"])
 
-        self.providers = providers
+    for name in order:
 
-    def get_providers(self) -> List[BaseProvider]:
-        """
-        Return active providers.
-        """
+        if name == "groq":
+            cfg = providers_cfg.get("groq", {})
 
-        return self.providers
+            api_key = os.getenv("GROQ_API_KEY") or cfg.get("api_key")
+
+            if api_key:
+                providers.append(
+                    GroqProvider(
+                        api_key=api_key
+                    )
+                )
+
+        elif name == "gemini":
+            cfg = providers_cfg.get("gemini", {})
+
+            api_key = os.getenv("GEMINI_API_KEY") or cfg.get("api_key")
+
+            if api_key:
+                providers.append(
+                    GeminiProvider(
+                        api_key=api_key
+                    )
+                )
+
+        elif name == "openrouter":
+            cfg = providers_cfg.get("openrouter", {})
+
+            api_key = os.getenv("OPENROUTER_API_KEY") or cfg.get("api_key")
+
+            if api_key:
+                providers.append(
+                    OpenAICompatProvider(
+                        api_key=api_key,
+                        base_url="https://openrouter.ai/api/v1"
+                    )
+                )
+
+    if not providers:
+        raise RuntimeError(
+            "No providers available. Set API keys."
+        )
+
+    return providers

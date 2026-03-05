@@ -1,33 +1,43 @@
 import asyncio
 
-from mfdballm.provider_registry import ProviderRegistry
+from mfdballm.provider_registry import build_providers
 from mfdballm.router import Router
 from mfdballm.agent.agent_loop import AgentLoop
 
+from mfdballm.tools.base_tool import BaseTool
 
-def hello_tool():
 
-    return "Hello from tool!"
+class HelloTool(BaseTool):
+    name = "hello_tool"
+    description = "Returns hello message"
+
+    parameters = {
+        "type": "object",
+        "properties": {},
+    }
+
+    async def run(self, **kwargs):
+        return "Hello from tool!"
 
 
 async def main():
 
-    registry = ProviderRegistry()
-    registry.load_from_env()
+    providers = build_providers()
 
-    router = Router(registry.get_providers())
+    router = Router(providers)
 
-    tools = {
-        "hello_tool": hello_tool
-    }
+    tools = [HelloTool()]
 
-    agent = AgentLoop(router, tools)
-
-    result = await agent.run(
-        "Use the hello_tool and tell me the result"
+    agent = AgentLoop(
+        router=router,
+        tools=tools,
     )
 
-    print("FINAL RESULT:", result)
+    result = await agent.run(
+        "Use hello_tool and show the result."
+    )
+
+    print("\nFINAL RESULT:", result)
 
 
 if __name__ == "__main__":

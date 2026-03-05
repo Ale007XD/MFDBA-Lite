@@ -1,0 +1,22 @@
+{
+  "providers": {
+    "gemini": {
+      "enabled": true,
+      "model": "gemini-2.0-flash"
+    },
+    "groq": {
+      "enabled": true,
+      "model": "llama3-70b-8192"
+    },
+    "openrouter": {
+      "enabled": true,
+      "model": "openai/gpt-4o-mini"
+    }
+  },
+  "router": {
+    "strategy": "fallback"
+  },
+  "agent": {
+    "max_iterations": 8
+  }
+}

@@ -22,5 +22,11 @@ secrets*
 Thumbs.db
 .DS_Store
 
+__pycache__/
+*.pyc
+
+.mfdballm/
+
+
 # Исключение для нужного файла
 !important.md
