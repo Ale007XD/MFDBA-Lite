@@ -2,10 +2,18 @@
 
 import logging
 import time
-from typing import List, Dict, Any
+from enum import Enum
 from threading import RLock
+from typing import List, Dict, Any
 
 from mfdballm.providers.base import BaseProvider
+from mfdballm.config import (
+    get_failure_threshold,
+    get_recovery_timeout,
+    get_half_open_max_requests,
+    get_max_retries,
+    get_base_backoff,
+)
 from mfdballm.exceptions import (
     ProviderRateLimitError,
     ProviderTimeoutError,
@@ -16,23 +24,108 @@ logger = logging.getLogger("mfdballm.router")
 
 
 # ============================================================
-# Provider State (Thread Safe via Router Lock)
+# Circuit State
+# ============================================================
+
+class CircuitState(Enum):
+    CLOSED = "CLOSED"
+    OPEN = "OPEN"
+    HALF_OPEN = "HALF_OPEN"
+
+
+# ============================================================
+# Provider State (State Machine Based)
 # ============================================================
 
 class ProviderState:
+
     def __init__(self, provider: BaseProvider):
         self.provider = provider
+
+        self.state = CircuitState.CLOSED
 
         self.success_count = 0
         self.failure_count = 0
         self.consecutive_failures = 0
 
-        self.ema_latency = None
-        self.cooldown_until = 0
+        self.opened_at: float | None = None
+        self.half_open_successes = 0
 
-    # ----------------------------------------
-    # Derived metrics
-    # ----------------------------------------
+        self.ema_latency: float | None = None
+
+    # --------------------------------------------------------
+
+    def _transition_to_open(self):
+        self.state = CircuitState.OPEN
+        self.opened_at = time.time()
+        self.half_open_successes = 0
+
+    def _transition_to_half_open(self):
+        self.state = CircuitState.HALF_OPEN
+        self.half_open_successes = 0
+
+    def _transition_to_closed(self):
+        self.state = CircuitState.CLOSED
+        self.consecutive_failures = 0
+        self.half_open_successes = 0
+        self.opened_at = None
+
+    # --------------------------------------------------------
+
+    def is_available(self) -> bool:
+        now = time.time()
+
+        if self.state == CircuitState.OPEN:
+            if self.opened_at is None:
+                return False
+
+            if now >= self.opened_at + get_recovery_timeout():
+                self._transition_to_half_open()
+                return True
+
+            return False
+
+        return True
+
+    # --------------------------------------------------------
+
+    def record_success(self, latency: float):
+        self.success_count += 1
+        self.consecutive_failures = 0
+
+        # EMA update
+        if self.ema_latency is None:
+            self.ema_latency = latency
+        else:
+            alpha = 0.3
+            self.ema_latency = (
+                alpha * latency + (1 - alpha) * self.ema_latency
+            )
+
+        if self.state == CircuitState.HALF_OPEN:
+            self.half_open_successes += 1
+            if (
+                self.half_open_successes
+                >= get_half_open_max_requests()
+            ):
+                self._transition_to_closed()
+
+    def record_failure(self):
+        self.failure_count += 1
+        self.consecutive_failures += 1
+
+        if self.state == CircuitState.HALF_OPEN:
+            self._transition_to_open()
+            return
+
+        if (
+            self.state == CircuitState.CLOSED
+            and self.consecutive_failures
+            >= get_failure_threshold()
+        ):
+            self._transition_to_open()
+
+    # --------------------------------------------------------
 
     @property
     def health_score(self) -> float:
@@ -46,95 +139,43 @@ class ProviderState:
 
         return success_rate * latency_factor
 
-    # ----------------------------------------
-    # Mutations (must be called under Router lock)
-    # ----------------------------------------
-
-    def record_success(self, latency: float):
-        self.success_count += 1
-        self.consecutive_failures = 0
-
-        if self.ema_latency is None:
-            self.ema_latency = latency
-        else:
-            alpha = 0.3
-            self.ema_latency = (
-                alpha * latency + (1 - alpha) * self.ema_latency
-            )
-
-    def record_failure(self):
-        self.failure_count += 1
-        self.consecutive_failures += 1
-
-        if self.consecutive_failures >= 3:
-            self.cooldown_until = time.time() + 30
-
-    def is_available(self) -> bool:
-        return time.time() >= self.cooldown_until
-
     def snapshot(self) -> Dict[str, Any]:
         return {
             "provider": self.provider.name,
+            "state": self.state.value,
             "success_count": self.success_count,
             "failure_count": self.failure_count,
             "consecutive_failures": self.consecutive_failures,
             "ema_latency": self.ema_latency,
             "health_score": round(self.health_score, 3),
-            "cooldown_active": not self.is_available(),
-            "cooldown_remaining": max(
-                0,
-                round(self.cooldown_until - time.time(), 1),
-            )
-            if not self.is_available()
-            else 0,
         }
 
 
 # ============================================================
-# Thread-Safe Router
+# Router (Deterministic + Thread Safe)
 # ============================================================
 
 class Router:
-    """
-    Production-grade Thread-Safe Self-Healing Router
-    """
 
-    def __init__(
-        self,
-        providers: List[BaseProvider],
-        max_retries: int = 3,
-        base_backoff: float = 1.0,
-    ):
+    def __init__(self, providers: List[BaseProvider]):
         if not providers:
             raise ValueError("No providers configured")
 
-        self.max_retries = max_retries
-        self.base_backoff = base_backoff
-
         self._lock = RLock()
-
-        self.provider_states: List[ProviderState] = [
+        self.provider_states = [
             ProviderState(p) for p in providers
         ]
 
-    # ============================================================
-    # Internal helpers
-    # ============================================================
+    # --------------------------------------------------------
 
     def _sorted_providers(self) -> List[ProviderState]:
-        """
-        Returns provider states sorted by health_score.
-        Must be called under lock.
-        """
         return sorted(
             self.provider_states,
             key=lambda s: s.health_score,
             reverse=True,
         )
 
-    # ============================================================
-    # Public API
-    # ============================================================
+    # --------------------------------------------------------
 
     def get_health_snapshot(self) -> List[Dict[str, Any]]:
         with self._lock:
@@ -142,6 +183,8 @@ class Router:
                 state.snapshot()
                 for state in self._sorted_providers()
             ]
+
+    # --------------------------------------------------------
 
     def chat(
         self,
@@ -151,10 +194,6 @@ class Router:
 
         start_time = time.monotonic()
         last_error = None
-
-        # -------------------------
-        # Phase 1: Select providers (under lock)
-        # -------------------------
 
         with self._lock:
             active_states = [
@@ -167,23 +206,14 @@ class Router:
 
         per_provider_timeout = max(
             5,
-            timeout // max(1, len(active_states))
+            timeout // max(1, len(active_states)),
         )
-
-        # -------------------------
-        # Phase 2: Execution (no global lock)
-        # -------------------------
 
         for state in active_states:
 
             provider = state.provider
 
-            logger.info(
-                f"Router trying provider: {provider.name} "
-                f"(score={state.health_score:.3f})"
-            )
-
-            for attempt in range(1, self.max_retries + 1):
+            for attempt in range(1, get_max_retries() + 1):
 
                 elapsed = time.monotonic() - start_time
                 if elapsed > timeout:
@@ -202,12 +232,6 @@ class Router:
                     with self._lock:
                         state.record_success(latency)
 
-                    logger.info(
-                        f"{provider.name} success "
-                        f"(latency={latency:.2f}s, "
-                        f"score={state.health_score:.3f})"
-                    )
-
                     return result
 
                 except (
@@ -218,36 +242,15 @@ class Router:
 
                     with self._lock:
                         state.record_failure()
-                        in_cooldown = state.cooldown_until > time.time()
 
                     last_error = e
 
-                    logger.warning(
-                        f"{provider.name} attempt {attempt}/{self.max_retries} "
-                        f"failed: {e}"
-                    )
-
-                    if in_cooldown:
-                        logger.warning(
-                            f"{provider.name} entering cooldown (30s)"
-                        )
+                    if attempt >= get_max_retries():
                         break
 
-                    if attempt >= self.max_retries:
-                        logger.warning(
-                            f"{provider.name} exhausted retries"
-                        )
-                        break
-
-                    backoff_time = self.base_backoff * (
+                    backoff_time = get_base_backoff() * (
                         2 ** (attempt - 1)
                     )
-
-                    logger.info(
-                        f"{provider.name} backoff sleeping "
-                        f"{backoff_time:.1f}s"
-                    )
-
                     time.sleep(backoff_time)
 
                 except Exception as e:
@@ -256,11 +259,6 @@ class Router:
                         state.record_failure()
 
                     last_error = e
-
-                    logger.error(
-                        f"{provider.name} unexpected error: {e}"
-                    )
-
                     break
 
         raise RuntimeError(
