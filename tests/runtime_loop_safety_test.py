@@ -1,0 +1,53 @@
+import asyncio
+
+from mfdballm.execution.execution_engine import ExecutionEngine
+from mfdballm.tools.tool_registry import ToolRegistry
+from mfdballm.execution.tool_executor import ToolExecutor
+from mfdballm.types import ProviderResponse
+from mfdballm.types import ToolCall
+
+
+# Tool that always asks LLM to call tool again
+async def loop_tool():
+    return "loop"
+
+
+class LoopAgent:
+
+    async def chat(self, messages, tools=None):
+
+        # Always return tool call again
+        return ProviderResponse(
+            text=None,
+            tool_calls=[
+                ToolCall(
+                    name="loop_tool",
+                    arguments={}
+                )
+            ]
+        )
+
+
+async def main():
+
+    registry = ToolRegistry()
+    registry.register("loop_tool", loop_tool)
+
+    executor = ToolExecutor(registry)
+
+    agent = LoopAgent()
+
+    engine = ExecutionEngine(
+        agent=agent,
+        tool_executor=executor,
+        max_steps=5
+    )
+
+    result = await engine.run("start loop")
+
+    assert result is not None
+
+    print("RUNTIME LOOP SAFETY TEST PASSED")
+
+
+asyncio.run(main())

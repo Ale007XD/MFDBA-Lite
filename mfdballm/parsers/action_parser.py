@@ -1,25 +1,25 @@
 from mfdballm.types_action import Action, ActionType
 
 
-def parse_provider_response(response):
+def parse(response):
 
     if response.tool_calls:
 
-        calls = []
+        return Action(
+            ActionType.TOOL,
+            {
+                "calls": response.tool_calls
+            }
+        )
 
-        for call in response.tool_calls:
+    return Action(
+        ActionType.FINISH,
+        {
+            "answer": response.text
+        }
+    )
 
-            calls.append(
-                {
-                    "name": call.name,
-                    "arguments": call.arguments,
-                }
-            )
 
-        return Action(ActionType.TOOL, calls)
-
-    if response.text:
-
-        return Action(ActionType.FINISH, {"answer": response.text})
-
-    return Action(ActionType.ERROR, {})
+# backward compatibility for tests
+def parse_provider_response(response):
+    return parse(response)

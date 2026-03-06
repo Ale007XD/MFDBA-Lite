@@ -1,15 +1,12 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
+from typing import List, Optional
 
-from mfdballm.types_tool import ToolCall
+from mfdballm.types_tool_call import ToolCall
 
 
 @dataclass
 class ProviderResponse:
-    """
-    Universal response returned by all LLM providers
-    """
 
-    text: str | None
+    text: str
+
     tool_calls: Optional[List[ToolCall]] = None
-    raw: Optional[Dict[str, Any]] = None
