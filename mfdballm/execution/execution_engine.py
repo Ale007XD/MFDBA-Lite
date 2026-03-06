@@ -1,43 +1,39 @@
-from mfdballm.execution.execution_state import ExecutionState
-from mfdballm.parsers.action_parser import parse_provider_response
-from mfdballm.types_action import ActionType
+from mfdballm.runtime.events import UserMessageEvent, StopEvent
+from mfdballm.runtime.event_dispatcher import EventDispatcher
+from mfdballm.runtime.runtime_state import RuntimeState
+from mfdballm.runtime.router_adapter import RouterAdapter
 
 
 class ExecutionEngine:
 
-    def __init__(self, router, tool_executor, max_iterations=5):
+    def __init__(self, router, tool_executor, max_steps=10):
 
-        self.router = router
+        router_adapter = RouterAdapter(router)
 
-        self.tool_executor = tool_executor
+        self.dispatcher = EventDispatcher()
+        self.dispatcher.register_default_handlers(
+            router_adapter,
+            tool_executor
+        )
 
-        self.max_iterations = max_iterations
+        self.max_steps = max_steps
 
     async def run(self, messages):
 
-        state = ExecutionState(messages)
+        state = RuntimeState(messages=list(messages))
 
-        while state.iteration < self.max_iterations:
+        event = UserMessageEvent(messages[-1])
 
-            state.increment()
+        step = 0
 
-            response = await self.router.chat(state.messages)
+        while True:
 
-            action = parse_provider_response(response)
+            if step > self.max_steps:
+                raise RuntimeError("Runtime loop exceeded max steps")
 
-            if action.type == ActionType.TOOL:
+            step += 1
 
-                for call in action.payload['calls']:
+            event = await self.dispatcher.dispatch(event, state)
 
-                    result = await self.tool_executor.execute(
-                        call.name,
-                        call.arguments
-                    )
-
-                    state.add_tool_result(result)
-
-            if action.type == ActionType.FINISH:
-
-                return action.payload['answer']
-
-        return 'max_iterations_reached'
+            if isinstance(event, StopEvent):
+                return event.result
