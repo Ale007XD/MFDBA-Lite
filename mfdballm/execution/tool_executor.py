@@ -1,11 +1,12 @@
 import time
 
-from mfdballm.types_tool_result import ToolResult
+from mfdballm.models.tool_result import ToolResult
 
 
 class ToolExecutor:
 
     def __init__(self, registry):
+
         self.registry = registry
 
     async def execute(self, tool_name, arguments):

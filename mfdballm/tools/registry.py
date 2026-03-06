@@ -1,26 +1,23 @@
-from typing import Dict
-from mfdballm.tools.base import BaseTool
-
-
 class ToolRegistry:
-    """
-    Registry storing tool objects.
-    """
 
     def __init__(self):
-        self._tools: Dict[str, BaseTool] = {}
 
-    def register(self, tool: BaseTool):
+        self.tools = {}
 
-        self._tools[tool.name] = tool
+    def register(self, name, tool=None):
 
-    def get(self, name: str) -> BaseTool:
+        # register(tool)
+        if tool is None:
 
-        if name not in self._tools:
-            raise RuntimeError(f"Tool not found: {name}")
+            tool = name
+            name = getattr(tool, "name", tool.__class__.__name__.lower())
 
-        return self._tools[name]
+        self.tools[name] = tool
 
-    def list(self):
+    def get(self, name):
 
-        return list(self._tools.keys())
+        return self.tools.get(name)
+
+    def list_tools(self):
+
+        return list(self.tools.keys())
