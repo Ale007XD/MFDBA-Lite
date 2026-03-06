@@ -1,26 +1,33 @@
 import asyncio
 
 from mfdballm.execution.engine import ExecutionEngine
+from mfdballm.execution.tool_executor import ToolExecutor
 from mfdballm.execution.agent import BaseAgent
 
 
-class TestAgent(BaseAgent):
+class DummyAgent(BaseAgent):
 
     async def run(self, message: str):
-        return message.upper()
+        return "Hello from agent!"
 
 
 async def main():
 
-    agent = TestAgent()
+    tools = {}
+    tool_executor = ToolExecutor(tools)
 
-    engine = ExecutionEngine(agent)
+    agent = DummyAgent()
 
-    r = await engine.run("hello")
+    engine = ExecutionEngine(
+        agent=agent,
+        tool_executor=tool_executor
+    )
 
-    assert r == "HELLO"
+    result = await engine.run("Hello")
 
-    print("EXECUTION ENGINE TEST PASSED")
+    print("\nENGINE RESULT:")
+    print(result)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

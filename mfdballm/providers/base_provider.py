@@ -1,23 +1,22 @@
 from abc import ABC, abstractmethod
 
+from mfdballm.types_provider_metadata import ProviderMetadata
 from mfdballm.types import ProviderResponse
 
 
 class BaseProvider(ABC):
 
-    def __init__(self, name: str, api_key: str, model: str, base_url: str | None = None):
-        self.name = name
-        self.api_key = api_key
-        self.model = model
-        self.base_url = base_url
-
+    @property
     @abstractmethod
-    async def chat(self, messages: list[dict], tools: list | None = None) -> ProviderResponse:
+    def metadata(self) -> ProviderMetadata:
         """
-        Universal chat interface for all providers.
-        Must return ProviderResponse.
+        Static provider capability description.
         """
         pass
 
-    async def health(self) -> bool:
-        return True
+    @abstractmethod
+    async def generate(self, prompt: str) -> ProviderResponse:
+        """
+        Execute model request.
+        """
+        pass

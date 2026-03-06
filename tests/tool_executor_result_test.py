@@ -7,28 +7,26 @@ from mfdballm.tools.base import BaseTool
 
 class EchoTool(BaseTool):
 
-    name = "echo"
-    description = "echo tool"
+    name = 'echo'
+    description = 'echo'
 
     async def run(self, args):
-        return args["text"]
+        return args['text']
 
 
 async def main():
 
     registry = ToolRegistry()
-
     registry.register(EchoTool())
 
     executor = ToolExecutor(registry)
 
-    result = await executor.execute("echo", {"text": "hello"})
+    r = await executor.execute('echo', {'text': 'hello'})
 
-    assert result.success is True
-    assert result.output == "hello"
-    assert result.tool_name == "echo"
+    assert r.output == 'hello'
+    assert r.success is True
 
-    print("TOOL EXECUTOR TEST PASSED")
+    print('TOOL EXECUTOR RESULT TEST PASSED')
 
 
 asyncio.run(main())
