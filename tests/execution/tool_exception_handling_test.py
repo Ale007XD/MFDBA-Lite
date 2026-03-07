@@ -12,24 +12,24 @@ class DummyRouter:
         return ProviderResponse(text="done")
 
 
-class DummyTool:
+class FailingTool:
 
     async def run(self, arguments):
-        return "ok"
+        raise RuntimeError("tool failure")
 
 
 @pytest.mark.asyncio
-async def test_execution_engine_basic():
+async def test_tool_exception_handling():
 
     registry = ToolRegistry()
-    registry.register("dummy", DummyTool())
+    registry.register("fail", FailingTool())
 
     executor = ToolExecutor(registry)
-
     router = DummyRouter()
 
     engine = ExecutionEngine(router, executor)
 
     result = await engine.run([{"role": "user", "content": "hi"}])
 
+    # engine должен пережить падение tool
     assert result == "done"

@@ -1,42 +1,88 @@
+import subprocess
+import sys
+import time
 import os
 from pathlib import Path
-from test_runner import TestRunner
 
 
-FAST_FOLDERS = [
-    "core",
-    "execution",
-    "provider",
-    "router",
-    "tools"
+FAST_TESTS = [
+    "tests/execution/execution_engine_test.py",
+    "tests/execution/execution_engine_tool_loop_test.py",
+    "tests/execution/tool_loop_limit_test.py",
+    "tests/execution/execution_step_builder_test.py",
+
+    "tests/tools/tool_executor_test.py",
+    "tests/tools/tool_executor_result_test.py",
+
+    "tests/provider/provider_response_test.py",
+
+    "tests/runtime/runtime_loop_safety_test.py",
 ]
 
 
-def discover_tests():
+SEPARATOR = "────────────────────────────────"
 
-    tests = []
 
-    for folder in FAST_FOLDERS:
+def run_test(test_path: str, index: int, total: int) -> bool:
+    print()
+    print(SEPARATOR)
+    print(f"[{index}/{total}] RUN {test_path}")
+    print(SEPARATOR)
 
-        path = Path("tests") / folder
+    start = time.time()
 
-        for file in path.glob("*_test.py"):
-            tests.append(file)
+    result = subprocess.run(
+        [sys.executable, test_path],
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
 
-    tests.sort()
+    duration = time.time() - start
 
-    return tests
+    if result.returncode != 0:
+        print(f"\n❌ FAIL {test_path} ({duration:.2f}s)")
+        return False
+
+    print(f"\n✅ PASS {test_path} ({duration:.2f}s)")
+    return True
 
 
 def main():
+    project_root = Path(__file__).resolve().parent.parent
 
-    tests = discover_tests()
+    if Path.cwd() != project_root:
+        print(f"Switching to project root: {project_root}")
+        os.chdir(project_root)
 
-    print(f"Fast mode: {len(tests)} tests\n")
+    total = len(FAST_TESTS)
+    passed = 0
 
-    runner = TestRunner()
+    print()
+    print("⚡ MFDBA FAST TEST SUITE")
+    print(SEPARATOR)
+    print(f"Running {total} critical tests\n")
 
-    runner.run_suite(tests)
+    start_suite = time.time()
+
+    for i, test in enumerate(FAST_TESTS, start=1):
+        ok = run_test(test, i, total)
+
+        if not ok:
+            print()
+            print("❌ FAST TEST SUITE FAILED")
+            sys.exit(1)
+
+        passed += 1
+
+    total_time = time.time() - start_suite
+
+    print()
+    print(SEPARATOR)
+    print("🎉 ALL FAST TESTS PASSED")
+    print(SEPARATOR)
+    print(f"Passed: {passed}/{total}")
+    print(f"Total time: {total_time:.2f}s")
+    print(SEPARATOR)
 
 
 if __name__ == "__main__":

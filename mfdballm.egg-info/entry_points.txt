@@ -1,0 +1,2 @@
+[console_scripts]
+mfdballm = mfdballm.cli:main

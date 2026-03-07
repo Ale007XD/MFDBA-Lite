@@ -14,21 +14,34 @@ class ProviderResponse:
     @classmethod
     def normalize(cls, response):
 
-        # deterministic text extraction
-        for field_name in ("text", "content", "message", "output"):
+        text = None
+        tool_calls = []
+        metadata = {}
 
-            if hasattr(response, field_name):
+        # --- dict responses (common in tests / simple routers)
+        if isinstance(response, dict):
 
-                text = getattr(response, field_name)
+            for field_name in ("text", "content", "message", "output"):
+                if field_name in response:
+                    text = response[field_name]
+                    break
 
-                break
+            tool_calls = response.get("tool_calls", [])
+            metadata = response.get("metadata", {})
+
+        # --- object responses (OpenAI-style / provider SDKs)
         else:
 
-            raise RuntimeError("ProviderResponse has no text field")
+            for field_name in ("text", "content", "message", "output"):
+                if hasattr(response, field_name):
+                    text = getattr(response, field_name)
+                    break
 
-        tool_calls = getattr(response, "tool_calls", [])
+            tool_calls = getattr(response, "tool_calls", [])
+            metadata = getattr(response, "metadata", {})
 
-        metadata = getattr(response, "metadata", {})
+        if text is None and not tool_calls:
+            raise RuntimeError("ProviderResponse has neither text nor tool_calls")
 
         return cls(
             text=text,

@@ -2,27 +2,30 @@ import asyncio
 
 from mfdballm.execution.tool_executor import ToolExecutor
 from mfdballm.tools.registry import ToolRegistry
-from mfdballm.tools.base import BaseTool
+from mfdballm.models.tool_call import ToolCall
 
 
-class EchoTool(BaseTool):
+class EchoTool:
 
     name = "echo"
-    description = "echo tool"
 
-    async def run(self, args):
-        return args["text"]
+    async def run(self, **kwargs):
+        return kwargs.get("text")
 
 
 async def main():
 
     registry = ToolRegistry()
-
     registry.register(EchoTool())
 
     executor = ToolExecutor(registry)
 
-    result = await executor.execute("echo", {"text": "hello"})
+    call = ToolCall(
+        name="echo",
+        arguments={"text": "hello"}
+    )
+
+    result = await executor.execute(call)
 
     assert result.success is True
     assert result.output == "hello"
@@ -31,4 +34,5 @@ async def main():
     print("TOOL EXECUTOR TEST PASSED")
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

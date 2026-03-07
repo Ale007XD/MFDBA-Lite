@@ -1,6 +1,6 @@
 import asyncio
 
-from mfdballm.execution.tool_agent import ToolAgent
+from mfdballm.agents.tool_agent import ToolAgent
 from mfdballm.execution.tool_executor import ToolExecutor
 from mfdballm.tools.registry import ToolRegistry
 from mfdballm.tools.base import BaseTool
@@ -44,7 +44,7 @@ async def main():
 
     r = await agent.run([])
 
-    assert r[0] == "hello"
+    assert r == "hello"
 
     print("TOOL AGENT TEST PASSED")
 

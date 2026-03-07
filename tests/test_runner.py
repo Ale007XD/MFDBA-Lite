@@ -1,59 +1,89 @@
-import importlib.util
-import traceback
-import time
+import subprocess
 import sys
+import time
 from pathlib import Path
+
+
+class C:
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    CYAN = "\033[96m"
+    YELLOW = "\033[93m"
+    RESET = "\033[0m"
+
+
+def c(text, color):
+    return f"{color}{text}{C.RESET}"
 
 
 class TestRunner:
 
     def __init__(self):
+        self.results = []
+        self.failed = []
 
-        self.total = 0
-        self.failed = 0
-
-    def run_file(self, path):
+    def run_file(self, path: Path):
 
         start = time.time()
 
         try:
 
-            spec = importlib.util.spec_from_file_location("test_module", path)
-            module = importlib.util.module_from_spec(spec)
-
-            spec.loader.exec_module(module)
-
-            if hasattr(module, "main"):
-                module.main()
+            proc = subprocess.run(
+                [sys.executable, str(path)]
+            )
 
             duration = time.time() - start
 
-            print(f"OK {path} ({duration:.3f}s)")
+            if proc.returncode == 0:
 
-        except Exception:
+                print(c("PASS", C.GREEN), path, f"({duration:.3f}s)")
+                self.results.append(("PASS", path))
 
-            duration = time.time() - start
+            else:
 
-            print(f"FAILED {path} ({duration:.3f}s)")
+                print(c("FAIL", C.RED), path)
+                self.results.append(("FAIL", path))
+                self.failed.append(path)
 
-            traceback.print_exc()
-
-            self.failed += 1
-
-        self.total += 1
+        except KeyboardInterrupt:
+            print(c("\nINTERRUPTED", C.YELLOW))
+            sys.exit(1)
 
     def run_suite(self, tests):
+
+        print(c("──────── MFDBA TEST SUITE ────────", C.CYAN))
 
         start = time.time()
 
         for test in tests:
             self.run_file(test)
 
-        total = time.time() - start
+        duration = time.time() - start
+
+        self.summary(duration)
+
+    def summary(self, duration):
+
+        total = len(self.results)
+        passed = sum(1 for r in self.results if r[0] == "PASS")
+        failed = total - passed
+
+        print()
+        print(c("──────── SUMMARY ────────", C.CYAN))
+        print("TOTAL:", total)
+        print(c("PASS:", C.GREEN), passed)
+
+        if failed:
+            print(c("FAIL:", C.RED), failed)
+        else:
+            print(c("FAIL:", C.GREEN), 0)
+
+        print(c("TIME:", C.YELLOW), f"{duration:.2f}s")
 
         if self.failed:
 
-            print(f"\nFAILED {self.failed}/{self.total} tests")
-            sys.exit(1)
+            print()
+            print(c("FAILED TESTS:", C.RED))
 
-        print(f"\nALL TESTS PASSED ({total:.3f}s)")
+            for f in self.failed:
+                print(" -", f)

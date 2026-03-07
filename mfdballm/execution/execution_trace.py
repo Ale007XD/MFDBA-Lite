@@ -1,5 +1,5 @@
 from typing import List, Dict, Optional
-from .step_result import StepResult
+from mfdballm.models.step_result import StepResult
 
 
 class ExecutionTrace:
