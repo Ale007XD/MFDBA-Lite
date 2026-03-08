@@ -1,124 +1,246 @@
 import asyncio
-import time
 import inspect
+import time
+import threading
+
+from enum import Enum
 from typing import List, Any, Optional
-from mfdballm.types import ProviderResponse
+
+from mfdballm.models.provider_response import ProviderResponse
+
+
+class CircuitState(Enum):
+
+    CLOSED = "CLOSED"
+    OPEN = "OPEN"
+    HALF_OPEN = "HALF_OPEN"
+
+
+class ProviderState:
+
+    def __init__(self, provider, reset_timeout: int):
+
+        self.provider = provider
+        self.reset_timeout = reset_timeout
+
+        self.failures = 0
+        self.state = CircuitState.CLOSED
+        self.opened_at: Optional[float] = None
+
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------
+
+    def is_available(self):
+
+        with self._lock:
+
+            if self.state == CircuitState.CLOSED:
+                return True
+
+            if self.state == CircuitState.OPEN:
+
+                if self.opened_at is None:
+                    return False
+
+                if time.time() - self.opened_at >= self.reset_timeout:
+                    self.state = CircuitState.HALF_OPEN
+                    return True
+
+                return False
+
+            if self.state == CircuitState.HALF_OPEN:
+                return True
+
+            return False
+
+    # ------------------------------------------------
+
+    def record_failure(self, threshold: int):
+
+        with self._lock:
+
+            if self.state == CircuitState.HALF_OPEN:
+
+                self.state = CircuitState.OPEN
+                self.opened_at = time.time()
+                self.failures = threshold
+                return
+
+            self.failures += 1
+
+            if self.failures >= threshold:
+                self.state = CircuitState.OPEN
+                self.opened_at = time.time()
+
+    # ------------------------------------------------
+
+    def record_success(self):
+
+        with self._lock:
+
+            self.failures = 0
+            self.state = CircuitState.CLOSED
+            self.opened_at = None
 
 
 class Router:
-    """
-    Fallback router with circuit breaker.
-
-    - sync + async compatible
-    - provider signature adaptive
-    - health snapshot support
-    """
 
     FAILURE_THRESHOLD = 2
-    RESET_TIMEOUT = 30
+    RESET_TIMEOUT = 1
 
     def __init__(self, providers: List[Any]):
+
         if not providers:
-            raise ValueError("Router requires at least one provider")
+            raise ValueError("Router requires providers")
 
         self.providers = providers
 
-        self._state = [
-            {
-                "provider": p,
-                "failures": 0,
-                "circuit_open": False,
-                "opened_at": None,
-            }
+        self._states = [
+            ProviderState(p, self.RESET_TIMEOUT)
             for p in providers
         ]
 
-    # --------------------------------------------------
-    # ENTRYPOINT
-    # --------------------------------------------------
+        self._provider_supports_tools = {}
 
-    def chat(self, messages, tools=None):
+    # ------------------------------------------------
 
-        try:
-            asyncio.get_running_loop()
-            return self._chat(messages, tools)
-        except RuntimeError:
-            return asyncio.run(self._chat(messages, tools))
+    @property
+    def provider_states(self):
+        return self._states
 
-    # --------------------------------------------------
-
-    async def _chat(self, messages, tools=None) -> ProviderResponse:
-
-        last_error: Optional[Exception] = None
-
-        for entry in self._state:
-
-            provider = entry["provider"]
-
-            # circuit breaker
-            if entry["circuit_open"]:
-                if time.time() - entry["opened_at"] < self.RESET_TIMEOUT:
-                    continue
-                else:
-                    entry["circuit_open"] = False
-                    entry["failures"] = 0
-
-            try:
-
-                if not hasattr(provider, "chat"):
-                    raise AttributeError(
-                        f"{provider.__class__.__name__} has no chat() method"
-                    )
-
-                # --------------------------------------------------
-                # ADAPT TO PROVIDER SIGNATURE
-                # --------------------------------------------------
-
-                sig = inspect.signature(provider.chat)
-
-                if "tools" in sig.parameters:
-                    result = await provider.chat(messages, tools=tools)
-                else:
-                    result = await provider.chat(messages)
-
-                entry["failures"] = 0
-
-                if result is None:
-                    raise RuntimeError(
-                        f"{provider.__class__.__name__} returned None"
-                    )
-
-                return result
-
-            except Exception as e:
-
-                last_error = e
-                entry["failures"] += 1
-
-                if entry["failures"] >= self.FAILURE_THRESHOLD:
-                    entry["circuit_open"] = True
-                    entry["opened_at"] = time.time()
-
-        raise RuntimeError(f"All providers failed. Last error: {last_error}")
-
-    # --------------------------------------------------
-    # HEALTH SNAPSHOT
-    # --------------------------------------------------
+    # ------------------------------------------------
 
     def get_health_snapshot(self):
 
         snapshot = []
 
-        for entry in self._state:
-
-            state = "OPEN" if entry["circuit_open"] else "CLOSED"
+        for state in self._states:
 
             snapshot.append(
                 {
-                    "provider": entry["provider"].__class__.__name__,
-                    "state": state,
-                    "failures": entry["failures"],
+                    "provider": state.provider.__class__.__name__,
+                    "state": state.state.value,
+                    "failures": state.failures
                 }
             )
 
         return snapshot
+
+    # ------------------------------------------------
+
+    def _supports_tools(self, provider):
+
+        key = provider.__class__
+
+        if key not in self._provider_supports_tools:
+
+            sig = inspect.signature(provider.chat)
+            self._provider_supports_tools[key] = "tools" in sig.parameters
+
+        return self._provider_supports_tools[key]
+
+    # ------------------------------------------------
+    # PUBLIC SYNC API
+    # ------------------------------------------------
+
+    def chat(self, messages, tools=None, timeout=None):
+        """
+        Sync entrypoint.
+
+        Returns:
+            str
+        """
+
+        async def runner():
+            resp = await self._chat(messages, tools, timeout)
+            return resp.text
+
+        try:
+            asyncio.get_running_loop()
+            return runner()
+        except RuntimeError:
+            return asyncio.run(runner())
+
+    # ------------------------------------------------
+    # ASYNC API (used by runtime)
+    # ------------------------------------------------
+
+    async def achat(self, messages, tools=None, timeout=None):
+        """
+        Async entrypoint.
+
+        Returns:
+            ProviderResponse
+        """
+
+        return await self._chat(messages, tools, timeout)
+
+    # ------------------------------------------------
+    # CORE ROUTER
+    # ------------------------------------------------
+
+    async def _chat(self, messages, tools=None, timeout=None):
+
+        last_error = None
+
+        for state in self._states:
+
+            if not state.is_available():
+                continue
+
+            provider = state.provider
+
+            try:
+
+                # -----------------------------
+                # call provider
+                # -----------------------------
+
+                if self._supports_tools(provider):
+                    result = provider.chat(messages, tools=tools)
+                else:
+                    result = provider.chat(messages)
+
+                # async provider
+                if inspect.isawaitable(result):
+
+                    if timeout:
+                        result = await asyncio.wait_for(result, timeout)
+                    else:
+                        result = await result
+
+                # sync provider
+                elif timeout:
+                    result = await asyncio.wait_for(
+                        asyncio.to_thread(lambda: result),
+                        timeout
+                    )
+
+                if result is None:
+                    raise RuntimeError("Provider returned None")
+
+                response = ProviderResponse.normalize(result)
+
+                state.record_success()
+
+                return response
+
+            except asyncio.TimeoutError as e:
+
+                last_error = e
+
+                # timeout НЕ должен trip circuit
+                continue
+
+            except asyncio.CancelledError:
+                raise
+
+            except Exception as e:
+
+                last_error = e
+                state.record_failure(self.FAILURE_THRESHOLD)
+
+        raise RuntimeError(
+            f"All providers failed. Last error: {last_error}"
+        )

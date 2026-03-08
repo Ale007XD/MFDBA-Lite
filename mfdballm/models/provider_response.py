@@ -1,90 +1,89 @@
-from typing import Any, Dict, Optional, List
-from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
+
+
+class ToolCall(BaseModel):
+    """
+    Canonical tool call representation used by ExecutionEngine.
+    """
+
+    id: Optional[str] = None
+    name: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ProviderResponse(BaseModel):
     """
-    Canonical provider response used by ExecutionEngine.
+    Canonical LLM response used by Router and ExecutionEngine.
 
-    All provider outputs must be normalized to this format.
+    Providers SHOULD return this model directly.
+    Router will normalize compatible outputs automatically.
+
+    Supported provider return types:
+        - ProviderResponse
+        - str
+        - dict
     """
 
     text: Optional[str] = None
-    tool_calls: Optional[List[Dict[str, Any]]] = None
+    tool_calls: List[ToolCall] = Field(default_factory=list)
 
-    @classmethod
-    def normalize(cls, raw: Any) -> "ProviderResponse":
+    model_config = {
+        "extra": "ignore"
+    }
+
+    # ---------------------------------------------------------
+    # Normalization layer (Router contract)
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def normalize(value: Any) -> "ProviderResponse":
         """
-        Normalize arbitrary provider output to ProviderResponse.
+        Convert provider outputs into canonical ProviderResponse.
 
-        Supported inputs:
-        - ProviderResponse
-        - provider-like objects (with .text / .tool_calls)
-        - str
-        - dict
-        - OpenAI-style responses
+        Accepted inputs:
+            ProviderResponse
+            str
+            dict
         """
 
-        # ---------------------------------------------------------
-        # Case 1: already ProviderResponse
-        # ---------------------------------------------------------
-        if isinstance(raw, cls):
-            return raw
+        # Already normalized
+        if isinstance(value, ProviderResponse):
+            return value
 
-        # ---------------------------------------------------------
-        # Case 2: provider-like object (duck typing)
-        # ---------------------------------------------------------
-        if hasattr(raw, "text") or hasattr(raw, "tool_calls"):
-            return cls(
-                text=getattr(raw, "text", None),
-                tool_calls=getattr(raw, "tool_calls", None),
+        # Simple string response
+        if isinstance(value, str):
+            return ProviderResponse(text=value)
+
+        # Dict-based response
+        if isinstance(value, dict):
+
+            text = value.get("text")
+
+            tool_calls_raw = value.get("tool_calls", [])
+
+            tool_calls = []
+
+            for call in tool_calls_raw:
+
+                if isinstance(call, ToolCall):
+                    tool_calls.append(call)
+
+                elif isinstance(call, dict):
+
+                    tool_calls.append(
+                        ToolCall(
+                            id=call.get("id"),
+                            name=call.get("name"),
+                            arguments=call.get("arguments", {})
+                        )
+                    )
+
+            return ProviderResponse(
+                text=text,
+                tool_calls=tool_calls
             )
 
-        # ---------------------------------------------------------
-        # Case 3: None → empty response
-        # ---------------------------------------------------------
-        if raw is None:
-            return cls(text="")
-
-        # ---------------------------------------------------------
-        # Case 4: plain string
-        # ---------------------------------------------------------
-        if isinstance(raw, str):
-            return cls(text=raw)
-
-        # ---------------------------------------------------------
-        # Case 5: dictionary response
-        # ---------------------------------------------------------
-        if isinstance(raw, dict):
-
-            text = raw.get("text")
-            tool_calls = raw.get("tool_calls")
-
-            # OpenAI-style response
-            if "choices" in raw:
-                choices = raw.get("choices", [])
-                if choices:
-                    message = choices[0].get("message", {})
-                    text = message.get("content")
-                    tool_calls = message.get("tool_calls")
-
-            # simple format: {"content": "..."}
-            if text is None and "content" in raw:
-                text = raw["content"]
-
-            # nested message: {"message": {"content": "..."}}
-            if text is None and "message" in raw:
-                msg = raw["message"]
-                if isinstance(msg, dict):
-                    text = msg.get("content")
-
-            if text is not None or tool_calls is not None:
-                return cls(text=text, tool_calls=tool_calls)
-
-            # fallback: stringify unknown dict
-            return cls(text=str(raw))
-
-        # ---------------------------------------------------------
-        # Unsupported format
-        # ---------------------------------------------------------
-        raise RuntimeError("ProviderResponse could not be normalized")
+        raise TypeError(
+            f"Unsupported provider response type: {type(value)}"
+        )
