@@ -1,53 +1,34 @@
-import httpx
+from typing import Any, Dict
 
 from mfdballm.providers.base_provider import BaseProvider
-from mfdballm.types import ProviderResponse
+from mfdballm.types_provider_metadata import ProviderMetadata
 
 
 class GeminiProvider(BaseProvider):
+    """
+    Provider для Google Gemini API.
+    """
 
     def __init__(self, api_key: str, model: str):
-        super().__init__(name="gemini", api_key=api_key, model=model)
+        self.api_key = api_key
+        self.model = model
 
-    async def chat(self, messages, tools=None):
-
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent?key={self.api_key}"
+    @property
+    def metadata(self) -> ProviderMetadata:
+        """
+        Метаданные провайдера.
+        """
+        return ProviderMetadata(
+            name="gemini",
+            models=[self.model],
+            supports_tools=False,
+            supports_stream=False,
+            max_context_tokens=32768,
         )
 
-        contents = []
-
-        for m in messages:
-
-            role = "user"
-
-            if m["role"] == "assistant":
-                role = "model"
-
-            contents.append({
-                "role": role,
-                "parts": [{"text": m["content"]}]
-            })
-
-        payload = {
-            "contents": contents
-        }
-
-        async with httpx.AsyncClient(timeout=60) as client:
-
-            r = await client.post(
-                url,
-                json=payload
-            )
-
-        r.raise_for_status()
-
-        data = r.json()
-
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
-
-        return ProviderResponse(
-            text=text,
-            raw=data
-        )
+    async def generate(self, prompt: str, **kwargs: Dict[str, Any]) -> str:
+        """
+        Генерация ответа.
+        (пока stub для тестов)
+        """
+        return f"[Gemini mock response for: {prompt}]"

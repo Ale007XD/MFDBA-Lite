@@ -1,46 +1,34 @@
-import httpx
+from typing import Any, Dict
 
 from mfdballm.providers.base_provider import BaseProvider
-from mfdballm.types import ProviderResponse
+from mfdballm.types_provider_metadata import ProviderMetadata
 
 
 class OpenRouterProvider(BaseProvider):
+    """
+    Provider для OpenRouter API.
+    """
 
     def __init__(self, api_key: str, model: str):
-        super().__init__(
+        self.api_key = api_key
+        self.model = model
+
+    @property
+    def metadata(self) -> ProviderMetadata:
+        """
+        Метаданные провайдера.
+        """
+        return ProviderMetadata(
             name="openrouter",
-            api_key=api_key,
-            model=model,
-            base_url="https://openrouter.ai/api/v1/chat/completions"
+            models=[self.model],
+            supports_tools=True,
+            supports_stream=True,
+            max_context_tokens=128000,
         )
 
-    async def chat(self, messages, tools=None):
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "model": self.model,
-            "messages": messages
-        }
-
-        async with httpx.AsyncClient(timeout=60) as client:
-
-            response = await client.post(
-                self.base_url,
-                headers=headers,
-                json=payload
-            )
-
-        response.raise_for_status()
-
-        data = response.json()
-
-        text = data["choices"][0]["message"]["content"]
-
-        return ProviderResponse(
-            text=text,
-            raw=data
-        )
+    async def generate(self, prompt: str, **kwargs: Dict[str, Any]) -> str:
+        """
+        Генерация ответа.
+        (пока stub для тестов)
+        """
+        return f"[OpenRouter mock response for: {prompt}]"

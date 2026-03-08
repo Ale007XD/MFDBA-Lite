@@ -1,5 +1,4 @@
 pyproject.toml
-setup.py
 mfdballm/__init__.py
 mfdballm/cli.py
 mfdballm/config.py

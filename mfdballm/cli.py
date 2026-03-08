@@ -1,17 +1,19 @@
 import argparse
 import asyncio
+import json
 
-from mfdballm.provider_registry import ProviderRegistry
+from mfdballm.provider_registry import build_providers
 from mfdballm.router import Router
 
 
 async def run_chat(user_message: str):
 
-    # Load providers
-    registry = ProviderRegistry()
-    registry.load_from_env()
+    # Load config
+    with open("config/config.default.json") as f:
+        config = json.load(f)
 
-    providers = registry.get_providers()
+    # Build providers
+    providers = build_providers(config)
 
     if not providers:
         raise RuntimeError("No providers configured")

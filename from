@@ -1,12 +1,11 @@
-from typing import Any, Dict
 
 from mfdballm.providers.base_provider import BaseProvider
 from mfdballm.types_provider_metadata import ProviderMetadata
 
 
-class GroqProvider(BaseProvider):
+class GeminiProvider(BaseProvider):
     """
-    Provider для Groq API.
+    Provider для Google Gemini API.
     """
 
     def __init__(self, api_key: str, model: str):
@@ -19,10 +18,10 @@ class GroqProvider(BaseProvider):
         Метаданные провайдера.
         """
         return ProviderMetadata(
-            name="groq",
+            name="gemini",
             models=[self.model],
-            supports_tools=True,
-            supports_stream=True,
+            supports_tools=False,
+            supports_stream=False,
             max_context_tokens=32768,
         )
 
@@ -31,4 +30,4 @@ class GroqProvider(BaseProvider):
         Генерация ответа.
         (пока stub для тестов)
         """
-        return f"[Groq mock response for: {prompt}]"
+        return f"[Gemini mock response for: {prompt}]"
