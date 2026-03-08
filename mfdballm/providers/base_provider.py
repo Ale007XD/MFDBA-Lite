@@ -1,22 +1,31 @@
-from abc import ABC, abstractmethod
-
 from mfdballm.types_provider_metadata import ProviderMetadata
 from mfdballm.types import ProviderResponse
 
 
-class BaseProvider(ABC):
+class BaseProvider:
+    """
+    Base class for all providers.
+    """
+
+    def __init__(self, name: str | None = None):
+        self._name = name or self.__class__.__name__
 
     @property
-    @abstractmethod
     def metadata(self) -> ProviderMetadata:
         """
-        Static provider capability description.
+        Default provider metadata.
         """
-        pass
+        return ProviderMetadata(
+            name=self._name,
+            supports_tools=False,
+            supports_stream=False,
+        )
 
-    @abstractmethod
     async def generate(self, prompt: str) -> ProviderResponse:
         """
         Execute model request.
+        Real providers must override this.
         """
-        pass
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement generate()"
+        )

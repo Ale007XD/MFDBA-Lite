@@ -1,10 +1,11 @@
-from typing import List
+from typing import List, Dict, Any
 
 from mfdballm.config import load_config
 from mfdballm.provider_registry import build_providers
 from mfdballm.router import Router
 
 from mfdballm.execution.tool_executor import ToolExecutor
+from mfdballm.execution.execution_engine import ExecutionEngine
 from mfdballm.tools.registry import ToolRegistry
 
 from mfdballm.models.step_result import StepResult
@@ -24,7 +25,7 @@ class SessionRuntime:
     ExecutionEngine controls the execution flow.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
 
         # configuration
         config = load_config()
@@ -41,8 +42,21 @@ class SessionRuntime:
         # tool executor
         self.tool_executor = ToolExecutor(self.registry)
 
-        # step history (Canonical Runtime API)
+        # execution engine
+        self.engine = ExecutionEngine(
+            self.router,
+            self.tool_executor,
+        )
+
+        # step history
         self.steps: List[StepResult] = []
+
+    async def run(self, messages: List[Dict[str, Any]]) -> Any:
+        """
+        Runtime entrypoint used by tests and CLI.
+        Delegates execution to the ExecutionEngine.
+        """
+        return await self.engine.run(messages)
 
     def add_step(self, step: StepResult) -> None:
         """
@@ -54,4 +68,4 @@ class SessionRuntime:
         """
         Return all recorded steps.
         """
-        return self.steps
+        return list(self.steps)

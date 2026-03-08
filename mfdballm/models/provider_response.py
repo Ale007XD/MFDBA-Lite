@@ -1,50 +1,90 @@
-from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional, List
+from pydantic import BaseModel
 
 
-@dataclass
-class ProviderResponse:
+class ProviderResponse(BaseModel):
+    """
+    Canonical provider response used by ExecutionEngine.
 
-    text: str
+    All provider outputs must be normalized to this format.
+    """
 
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    text: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
 
     @classmethod
-    def normalize(cls, response):
+    def normalize(cls, raw: Any) -> "ProviderResponse":
+        """
+        Normalize arbitrary provider output to ProviderResponse.
 
-        text = None
-        tool_calls = []
-        metadata = {}
+        Supported inputs:
+        - ProviderResponse
+        - provider-like objects (with .text / .tool_calls)
+        - str
+        - dict
+        - OpenAI-style responses
+        """
 
-        # --- dict responses (common in tests / simple routers)
-        if isinstance(response, dict):
+        # ---------------------------------------------------------
+        # Case 1: already ProviderResponse
+        # ---------------------------------------------------------
+        if isinstance(raw, cls):
+            return raw
 
-            for field_name in ("text", "content", "message", "output"):
-                if field_name in response:
-                    text = response[field_name]
-                    break
+        # ---------------------------------------------------------
+        # Case 2: provider-like object (duck typing)
+        # ---------------------------------------------------------
+        if hasattr(raw, "text") or hasattr(raw, "tool_calls"):
+            return cls(
+                text=getattr(raw, "text", None),
+                tool_calls=getattr(raw, "tool_calls", None),
+            )
 
-            tool_calls = response.get("tool_calls", [])
-            metadata = response.get("metadata", {})
+        # ---------------------------------------------------------
+        # Case 3: None → empty response
+        # ---------------------------------------------------------
+        if raw is None:
+            return cls(text="")
 
-        # --- object responses (OpenAI-style / provider SDKs)
-        else:
+        # ---------------------------------------------------------
+        # Case 4: plain string
+        # ---------------------------------------------------------
+        if isinstance(raw, str):
+            return cls(text=raw)
 
-            for field_name in ("text", "content", "message", "output"):
-                if hasattr(response, field_name):
-                    text = getattr(response, field_name)
-                    break
+        # ---------------------------------------------------------
+        # Case 5: dictionary response
+        # ---------------------------------------------------------
+        if isinstance(raw, dict):
 
-            tool_calls = getattr(response, "tool_calls", [])
-            metadata = getattr(response, "metadata", {})
+            text = raw.get("text")
+            tool_calls = raw.get("tool_calls")
 
-        if text is None and not tool_calls:
-            raise RuntimeError("ProviderResponse has neither text nor tool_calls")
+            # OpenAI-style response
+            if "choices" in raw:
+                choices = raw.get("choices", [])
+                if choices:
+                    message = choices[0].get("message", {})
+                    text = message.get("content")
+                    tool_calls = message.get("tool_calls")
 
-        return cls(
-            text=text,
-            tool_calls=tool_calls,
-            metadata=metadata
-        )
+            # simple format: {"content": "..."}
+            if text is None and "content" in raw:
+                text = raw["content"]
+
+            # nested message: {"message": {"content": "..."}}
+            if text is None and "message" in raw:
+                msg = raw["message"]
+                if isinstance(msg, dict):
+                    text = msg.get("content")
+
+            if text is not None or tool_calls is not None:
+                return cls(text=text, tool_calls=tool_calls)
+
+            # fallback: stringify unknown dict
+            return cls(text=str(raw))
+
+        # ---------------------------------------------------------
+        # Unsupported format
+        # ---------------------------------------------------------
+        raise RuntimeError("ProviderResponse could not be normalized")

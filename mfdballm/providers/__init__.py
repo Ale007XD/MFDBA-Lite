@@ -3,9 +3,28 @@
 """
 Providers package.
 
-Providers are imported explicitly where needed.
-Avoid importing all providers here to prevent
-optional dependency failures.
+Providers are exposed via lazy import to avoid importing
+optional dependencies unless they are actually used.
 """
 
-__all__ = []
+from importlib import import_module
+from typing import Any
+
+__all__ = [
+    "OpenRouterProvider",
+    "GeminiProvider",
+    "GroqProvider",
+]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "OpenRouterProvider":
+        return import_module(".openrouter_provider", __name__).OpenRouterProvider
+
+    if name == "GeminiProvider":
+        return import_module(".gemini_provider", __name__).GeminiProvider
+
+    if name == "GroqProvider":
+        return import_module(".groq_provider", __name__).GroqProvider
+
+    raise AttributeError(f"module {__name__} has no attribute {name}")
